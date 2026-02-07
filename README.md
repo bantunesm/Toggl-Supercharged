@@ -1,75 +1,75 @@
 # Cockpit Productivity Dashboard
 
-Dashboard Laravel de suivi de productivite base sur Toggl Track.
+Laravel productivity dashboard powered by Toggl Track.
 
-Le projet calcule et affiche des indicateurs de charge de travail (periode, evolution, heatmap, records, repartitions clients/projets, comparatifs externes) en s'appuyant sur des snapshots locaux pour limiter les appels API.
+This project computes and displays workload indicators (period performance, trends, heatmap, records, client/project breakdowns, and external benchmarks) using local snapshots to reduce API calls.
 
-## Sommaire
+## Table of Contents
 
-1. [Fonctionnalites](#fonctionnalites)
-2. [Stack technique](#stack-technique)
+1. [Features](#features)
+2. [Tech Stack](#tech-stack)
 3. [Architecture](#architecture)
-4. [Structure du projet](#structure-du-projet)
-5. [Prerequis](#prerequis)
-6. [Installation locale](#installation-locale)
+4. [Project Structure](#project-structure)
+5. [Prerequisites](#prerequisites)
+6. [Local Setup](#local-setup)
 7. [Configuration](#configuration)
-8. [Utilisation](#utilisation)
-9. [Commandes utiles](#commandes-utiles)
-10. [Cache, sync et warmup](#cache-sync-et-warmup)
+8. [Usage](#usage)
+9. [Useful Commands](#useful-commands)
+10. [Cache, Sync, and Warmup](#cache-sync-and-warmup)
 11. [Tests](#tests)
-12. [Mise en production](#mise-en-production)
-13. [Checklist avant publication GitHub](#checklist-avant-publication-github)
-14. [Points d'attention](#points-dattention)
-15. [Licence](#licence)
+12. [Production Deployment](#production-deployment)
+13. [Checklist Before Publishing to GitHub](#checklist-before-publishing-to-github)
+14. [Caveats](#caveats)
+15. [License](#license)
 
-## Fonctionnalites
+## Features
 
-- Vue principale: `GET /cockpit/productivity`
-- Filtrage par annee et mois (`year`, `month`)
-- Vue annuelle ou mensuelle avec navigation periode precedente/suivante
+- Main screen: `GET /cockpit/productivity`
+- Year/month filtering (`year`, `month`)
+- Yearly and monthly views with previous/next period navigation
 - KPIs:
-  - temps total
-  - moyenne journaliere
-  - progression vs objectif journalier
-  - meilleur mois
-- Comparatif periode courante vs periode precedente
-- Heatmap journaliere style GitHub
-- Repartition du temps:
-  - par client
-  - par projet
-- Comparaison externe:
-  - benchmarks entrepreneurs
-  - benchmarks pays
-- Records "all time":
-  - meilleur jour
-  - meilleur mois
-  - meilleure annee
-- Modal d'accueil motivee + recap veille/7 jours
-- Gestion degradation API (quota, indisponibilite) avec fallback sur snapshots existants
+  - total tracked time
+  - daily average
+  - progress vs daily goal
+  - best month
+- Current period vs previous period comparison
+- GitHub-like daily heatmap
+- Time breakdown:
+  - by client
+  - by project
+- External comparison:
+  - entrepreneur benchmarks
+  - country benchmarks
+- All-time records:
+  - best day
+  - best month
+  - best year
+- Welcome modal with motivational message and daily/weekly recap
+- API degradation handling (quota/unavailability) with snapshot fallback
 
-## Stack technique
+## Tech Stack
 
 - PHP `^8.2`
 - Laravel `^12`
-- Base de donnees locale (sqlite par defaut)
-- Cache Laravel (database dans `.env.example`)
-- Vite + Tailwind CSS v4 (tooling present)
-- Chart.js (charge via CDN dans la vue)
-- Tailwind CDN (charge dans la vue `productivity.blade.php`)
+- Local database (sqlite by default)
+- Laravel cache (database store in `.env.example`)
+- Vite + Tailwind CSS v4 (tooling available)
+- Chart.js (loaded via CDN in the Blade view)
+- Tailwind CDN (loaded in `productivity.blade.php`)
 
 ## Architecture
 
-Flux principal:
+Main flow:
 
-1. Route `/cockpit/productivity` vers `ProductivityDashboardController`
-2. Le controleur calcule la periode selectionnee (mois/annee)
+1. Route `/cockpit/productivity` goes to `ProductivityDashboardController`
+2. The controller resolves the selected period (month/year)
 3. `TogglService`:
-   - synchronise ou reutilise des snapshots (`toggl_sync_snapshots`)
-   - calcule les metriques et evolutions
-   - gere fallback si l'API echoue ou limite le quota
-4. La vue Blade rend les cartes KPI, tableaux, heatmap et graphiques
+   - syncs or reuses snapshots (`toggl_sync_snapshots`)
+   - computes metrics and trends
+   - handles fallback when the API fails or is quota-limited
+4. The Blade view renders KPI cards, tables, heatmap, and charts
 
-Fichiers centraux:
+Core files:
 
 - `app/Http/Controllers/Cockpit/ProductivityDashboardController.php`
 - `app/Services/TogglService.php`
@@ -77,7 +77,7 @@ Fichiers centraux:
 - `database/migrations/2026_02_07_000100_create_toggl_sync_snapshots_table.php`
 - `resources/views/cockpit/productivity.blade.php`
 
-## Structure du projet
+## Project Structure
 
 ```text
 app/
@@ -96,23 +96,23 @@ routes/
   console.php
 ```
 
-## Prerequis
+## Prerequisites
 
 - PHP 8.2+
 - Composer
-- Node.js 20+ et npm
-- SQLite (ou autre moteur supporte Laravel si vous adaptez la config)
-- Token API Toggl Track avec acces au workspace cible
+- Node.js 20+ and npm
+- SQLite (or another Laravel-supported database engine if you change config)
+- Toggl Track API token with access to the target workspace
 
-## Installation locale
+## Local Setup
 
-Option rapide:
+Quick option:
 
 ```bash
 composer run setup
 ```
 
-Ou etapes detaillees:
+Or step-by-step:
 
 ```bash
 composer install
@@ -123,17 +123,17 @@ npm install
 npm run build
 ```
 
-Lancer en mode dev (serveur + queue + logs + vite):
+Run in development mode (server + queue + logs + vite):
 
 ```bash
 composer dev
 ```
 
-URL locale par defaut: `http://127.0.0.1:8000`
+Default local URL: `http://127.0.0.1:8000`
 
 ## Configuration
 
-Variables importantes dans `.env`:
+Important `.env` variables:
 
 ### Application/Laravel
 
@@ -146,9 +146,9 @@ Variables importantes dans `.env`:
 
 ### Toggl
 
-- `TOGGL_BASE_URL` (defaut: `https://api.track.toggl.com`)
-- `TOGGL_API_TOKEN` (obligatoire)
-- `TOGGL_WORKSPACE_ID` (obligatoire)
+- `TOGGL_BASE_URL` (default: `https://api.track.toggl.com`)
+- `TOGGL_API_TOKEN` (required)
+- `TOGGL_WORKSPACE_ID` (required)
 - `TOGGL_SUMMARY_ENDPOINT`
 - `TOGGL_SUMMARY_GROUPING`
 - `TOGGL_DAILY_GOAL_HOURS`
@@ -162,99 +162,99 @@ Variables importantes dans `.env`:
 
 ### Benchmarks
 
-Les repères comparatifs sont configurables dans:
+Benchmark values are configurable in:
 
 - `config/benchmarks.php`
 
-## Utilisation
+## Usage
 
-- `/` redirige vers `/cockpit/productivity`
-- Params:
+- `/` redirects to `/cockpit/productivity`
+- Query params:
   - `year` (int)
-  - `month` (1..12 ou vide pour vue annuelle)
+  - `month` (1..12, or empty for yearly view)
 
-Exemples:
+Examples:
 
 - `GET /cockpit/productivity?year=2026`
 - `GET /cockpit/productivity?year=2026&month=2`
 
-## Commandes utiles
+## Useful Commands
 
 ```bash
-# Warmup manuel snapshots
+# Manual snapshot warmup
 php artisan toggl:warmup --history-years=5 --daily-days=120
 
-# Lancer les tests
+# Run tests
 php artisan test
 
-# Voir les routes
+# List routes
 php artisan route:list
 
-# Lancer le scheduler localement
+# Run scheduler locally
 php artisan schedule:work
 ```
 
-## Cache, sync et warmup
+## Cache, Sync, and Warmup
 
-Strategie du service Toggl:
+Toggl service strategy:
 
-- Snapshot unique par fenetre (`workspace_id + window_start_date + window_end_date`)
-- Periodes fermees: reutilisation du snapshot
-- Periode ouverte (incluant aujourd'hui): refresh selon `TOGGL_SYNC_TTL_MINUTES`
-- Cache applicatif des aggregats selon `TOGGL_CACHE_TTL_MINUTES`
-- En cas d'erreur API:
-  - si snapshot existe, il est reutilise
-  - sinon snapshot fallback en memoire avec metadonnees d'erreur/quota
+- Single snapshot per window (`workspace_id + window_start_date + window_end_date`)
+- Closed periods: snapshot is reused
+- Open period (including today): refresh based on `TOGGL_SYNC_TTL_MINUTES`
+- Aggregates are cached based on `TOGGL_CACHE_TTL_MINUTES`
+- On API errors:
+  - existing snapshot is reused
+  - otherwise an in-memory fallback snapshot is built with error/quota metadata
 
 Warmup:
 
-- Commande artisan `toggl:warmup` definie dans `routes/console.php`
-- Schedule actuel: execution **horaire** (`->hourly()`)
-- Objectif: pre-remplir snapshots annuels, mensuels, et N jours pour la heatmap
+- Artisan command `toggl:warmup` is defined in `routes/console.php`
+- Current schedule: **hourly** (`->hourly()`)
+- Goal: prefill yearly, monthly, and daily snapshots for the heatmap
 
 ## Tests
 
-Suite actuelle:
+Current suite:
 
 - `tests/Unit/ExampleTest.php`
 - `tests/Feature/ExampleTest.php`
 
-Note: le test feature par defaut attend `200` sur `/`, alors que `/` redirige vers `/cockpit/productivity` (302). Il faut ajuster ce test avant CI publique.
+Note: the default feature test expects `200` on `/`, but `/` currently redirects to `/cockpit/productivity` (`302`). Update this test before enabling public CI.
 
-## Mise en production
+## Production Deployment
 
-Checklist minimale:
+Minimal checklist:
 
-1. Configurer un vrai serveur web (Nginx/Apache) + PHP-FPM
-2. Configurer les variables `.env` (Toggl, DB, cache, queue)
-3. Executer:
+1. Configure a proper web server (Nginx/Apache) + PHP-FPM
+2. Configure `.env` values (Toggl, DB, cache, queue)
+3. Run:
    - `composer install --no-dev --optimize-autoloader`
    - `php artisan migrate --force`
-   - `npm ci && npm run build` (ou pipeline CI)
-4. Activer scheduler:
+   - `npm ci && npm run build` (or do this in CI/CD)
+4. Enable scheduler:
    - cron `* * * * * php artisan schedule:run`
-5. Activer worker queue si necessaire
-6. Mettre en place logs + supervision
+5. Enable queue worker if needed
+6. Set up logs and monitoring
 
-## Checklist avant publication GitHub
+## Checklist Before Publishing to GitHub
 
-1. Verifier que `.env` n'est pas committe (deja ignore)
-2. Verifier qu'aucun token/API key n'apparait dans les commits
-3. Decider si les assets personnels doivent rester publics:
+1. Confirm `.env` is not committed (already ignored)
+2. Confirm no token/API key appears in commits
+3. Decide whether personal assets should remain public:
    - `public/images/1758276756115.jpeg`
    - `resources/images/1758276756115.jpeg`
-4. Reviser les textes hardcodes personnels dans la vue/controleur
-5. Corriger les tests casses pour avoir une CI verte
-6. Ajouter un workflow CI GitHub Actions (tests + lint)
-7. Initialiser le depot git local puis pousser sur GitHub
+4. Review hardcoded personal text in controller/view
+5. Fix failing tests to keep CI green
+6. Add a GitHub Actions workflow (tests + lint)
+7. Initialize local git repo and push to GitHub
 
-## Points d'attention
+## Caveats
 
-- Le dashboard n'est pas protege par authentification dans l'etat actuel.
-- L'UI charge `Chart.js` et `Tailwind CDN` depuis internet (pas 100% offline).
-- `TOGGL_WARMUP_SCHEDULE_TIME` est present en config mais non utilise par la tache schedulee actuelle.
-- Les tests sont minimaux et couvrent peu la logique metier.
+- The dashboard is currently not protected by authentication.
+- The UI loads `Chart.js` and `Tailwind CDN` from the internet (not fully offline).
+- `TOGGL_WARMUP_SCHEDULE_TIME` exists in config but is not used by the current scheduled task.
+- Tests are minimal and provide limited business-logic coverage.
 
-## Licence
+## License
 
-Ce projet est base sur Laravel (licence MIT). Precisez la licence finale du projet dans ce fichier selon votre choix (MIT recommande).
+This project is based on Laravel (MIT license). Define your final project license in this file (MIT recommended).
