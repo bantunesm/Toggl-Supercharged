@@ -1,3 +1,5 @@
+<img width="1304" height="800" alt="image" src="https://github.com/user-attachments/assets/090812ae-2054-41b4-b921-0257f18ead4f" />
+
 # Cockpit Productivity Dashboard
 
 Laravel productivity dashboard powered by Toggl Track.
