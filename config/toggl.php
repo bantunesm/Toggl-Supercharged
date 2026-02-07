@@ -15,6 +15,7 @@ return [
     'warmup_daily_days' => (int) env('TOGGL_WARMUP_DAILY_DAYS', 120),
     'heatmap_on_demand_max_sync' => (int) env('TOGGL_HEATMAP_ON_DEMAND_MAX_SYNC', 14),
     'heatmap_month_on_demand_max_sync' => (int) env('TOGGL_HEATMAP_MONTH_ON_DEMAND_MAX_SYNC', 7),
+    'warmup_schedule' => env('TOGGL_WARMUP_SCHEDULE', 'hourly'),
     'warmup_schedule_time' => env('TOGGL_WARMUP_SCHEDULE_TIME', '03:10'),
     'timeout_seconds' => (int) env('TOGGL_TIMEOUT_SECONDS', 20),
 ];

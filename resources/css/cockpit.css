@@ -1,0 +1,153 @@
+:root {
+    --bg-1: #f6f8fb;
+    --bg-2: #eaf1f1;
+    --ink: #101828;
+}
+
+body {
+    font-family: 'Space Grotesk', sans-serif;
+    color: var(--ink);
+    background:
+        radial-gradient(1200px 600px at 90% -10%, #c7f0e2 0%, transparent 55%),
+        radial-gradient(1000px 500px at -10% 110%, #dbeafe 0%, transparent 52%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+}
+
+.mono {
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.welcome-modal {
+    opacity: 1;
+    transition: opacity 1650ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.welcome-backdrop {
+    background:
+        radial-gradient(1200px 650px at 80% 8%, rgba(45, 212, 191, 0.34), transparent 58%),
+        radial-gradient(900px 560px at 12% 88%, rgba(56, 189, 248, 0.24), transparent 56%),
+        linear-gradient(160deg, rgba(2, 6, 23, 0.94), rgba(15, 23, 42, 0.9));
+    transition: transform 1500ms cubic-bezier(0.16, 1, 0.3, 1), filter 1500ms ease, opacity 1500ms ease;
+}
+
+.welcome-shell {
+    transition: transform 1350ms cubic-bezier(0.16, 1, 0.3, 1), opacity 1350ms ease, filter 1350ms ease;
+    transform-origin: center center;
+}
+
+.welcome-modal.modal-exit {
+    opacity: 0;
+}
+
+.welcome-modal.modal-exit .welcome-backdrop {
+    opacity: 0;
+    filter: blur(3px) saturate(1.28);
+    transform: scale(1.05);
+}
+
+.welcome-modal.modal-exit .welcome-shell {
+    opacity: 0;
+    filter: blur(8px) saturate(1.24);
+    transform: perspective(1200px) translateY(-28px) scale(1.03) rotateX(8deg);
+}
+
+.welcome-ripple-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+    mix-blend-mode: screen;
+}
+
+.welcome-ripple {
+    position: absolute;
+    border-radius: 9999px;
+    opacity: 0;
+    border: 2px solid rgba(103, 232, 249, 0.84);
+    box-shadow:
+        0 0 26px rgba(45, 212, 191, 0.36),
+        inset 0 0 12px rgba(186, 230, 253, 0.2);
+    transform: translate(-50%, -50%) scale(0.2);
+    animation: cockpit-ripple 1650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cockpit-ripple {
+    0% {
+        opacity: 0.94;
+        transform: translate(-50%, -50%) scale(0.2);
+        filter: blur(0);
+    }
+
+    55% {
+        opacity: 0.72;
+    }
+
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(var(--rscale));
+        filter: blur(1.8px);
+    }
+}
+
+.dashboard-spotlight {
+    background:
+        radial-gradient(900px 420px at 12% 8%, rgba(45, 212, 191, 0.17), transparent 60%),
+        radial-gradient(700px 360px at 92% 92%, rgba(14, 165, 233, 0.16), transparent 62%),
+        linear-gradient(130deg, rgba(255, 255, 255, 0.95), rgba(241, 245, 249, 0.92));
+}
+
+.spotlight-avatar {
+    position: relative;
+}
+
+.spotlight-avatar::before {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 9999px;
+    background: conic-gradient(from 0deg, rgba(13, 148, 136, 0.72), rgba(14, 165, 233, 0.18), rgba(13, 148, 136, 0.72));
+    animation: cockpit-orbit 3.8s linear infinite;
+    z-index: 0;
+}
+
+@keyframes cockpit-orbit {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.highlight-card {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(148, 163, 184, 0.34);
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.92));
+}
+
+.highlight-watermark {
+    position: absolute;
+    right: 0.9rem;
+    top: 50%;
+    height: 4.4rem;
+    width: 4.4rem;
+    color: #0f766e;
+    opacity: 0.17;
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.highlight-watermark svg {
+    height: 100%;
+    width: 100%;
+}
+
+@media (max-width: 640px) {
+    .highlight-watermark {
+        height: 3.8rem;
+        width: 3.8rem;
+        right: 0.7rem;
+    }
+}

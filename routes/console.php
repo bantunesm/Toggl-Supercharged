@@ -29,11 +29,23 @@ Artisan::command('toggl:warmup {--history-years=} {--daily-days=}', function (To
     ));
 })->purpose('Warm up Toggl snapshots for dashboard periods and daily heatmap');
 
-Schedule::command(sprintf(
+$warmupSchedule = strtolower((string) config('toggl.warmup_schedule', 'hourly'));
+$warmupScheduleTime = (string) config('toggl.warmup_schedule_time', '03:10');
+if (!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/', $warmupScheduleTime)) {
+    $warmupScheduleTime = '03:10';
+}
+$warmupMinute = (int) substr($warmupScheduleTime, 3, 2);
+
+$warmupEvent = Schedule::command(sprintf(
     'toggl:warmup --history-years=%d --daily-days=%d',
     (int) config('toggl.history_years', 5),
     (int) config('toggl.warmup_daily_days', 120)
 ))
-    ->hourly()
     ->withoutOverlapping()
     ->runInBackground();
+
+if ($warmupSchedule === 'daily') {
+    $warmupEvent->dailyAt($warmupScheduleTime);
+} else {
+    $warmupEvent->hourlyAt($warmupMinute);
+}
