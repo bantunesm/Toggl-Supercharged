@@ -158,13 +158,132 @@
 
         @include('cockpit.partials.highlights-cards')
 
-        <section class="mt-4 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-            <div class="mb-2 flex items-center justify-between text-sm">
-                <span class="text-slate-600">Progression vers l'objectif de période</span>
-                <span class="font-semibold text-slate-900">{{ $progressPercent }}%</span>
+        <section class="mt-4 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm" data-tabs-widget data-initial-tab="forecast">
+            @php
+                $driftToneClass = $driftLevel === 'critical'
+                    ? 'text-rose-700'
+                    : ($driftLevel === 'warning' ? 'text-amber-700' : 'text-emerald-700');
+                $catchupToneClass = $catchupState === 'ahead'
+                    ? 'text-emerald-700'
+                    : (($catchupState === 'pending' || $catchupState === 'today') ? 'text-amber-700' : 'text-slate-700');
+            @endphp
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-slate-900">Pilotage intelligent</h2>
+                    <p class="mt-1 text-sm text-slate-500">Prévision, dérive, focus, constance et rattrapage.</p>
+                </div>
+                <p class="mono text-xs text-slate-500">Période: {{ $periodLabel }}</p>
             </div>
-            <div class="h-3 w-full overflow-hidden rounded-full bg-teal-100">
-                <div class="h-full rounded-full bg-teal-600 transition-all duration-700" style="width: {{ $progressBarPercent }}%;"></div>
+
+            <div class="mt-4 inline-flex flex-wrap rounded-lg border border-slate-200 bg-slate-50 p-1">
+                <button type="button" data-tab-button data-tab-target="forecast" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700">Prévision</button>
+                <button type="button" data-tab-button data-tab-target="drift" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700">Dérive</button>
+                <button type="button" data-tab-button data-tab-target="focus" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700">Focus</button>
+                <button type="button" data-tab-button data-tab-target="streak" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700">Streak</button>
+                <button type="button" data-tab-button data-tab-target="catchup" class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700">Rattrapage</button>
+            </div>
+
+            <div class="mt-4" data-tab-panel="forecast">
+                <div class="grid gap-3 md:grid-cols-2 md:items-stretch">
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">{{ $forecastScopeLabel }}</p>
+                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $forecastProjectedHours }} h</p>
+                        <p class="mt-1 text-sm text-slate-600">Objectif cible: {{ $forecastTargetHours }} h · {{ $forecastProgressPercent }}%</p>
+                        <div class="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-teal-100">
+                            <div class="h-full rounded-full bg-teal-600 transition-all duration-700" style="width: {{ $forecastProgressBarPercent }}%;"></div>
+                        </div>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        @if ((float) $forecastSurplusHours > 0)
+                            <p class="text-xs text-slate-500">Avance estimée</p>
+                            <p class="mono mt-2 text-2xl font-semibold text-emerald-700">+{{ $forecastSurplusHours }} h</p>
+                            <p class="mt-1 text-xs text-slate-500">Objectif déjà dépassé à projection constante.</p>
+                        @else
+                            <p class="text-xs text-slate-500">Reste à couvrir</p>
+                            <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $forecastRemainingHours }} h</p>
+                            <p class="mt-1 text-xs text-slate-500">Écart restant vers l’objectif cible.</p>
+                        @endif
+                        <div class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            {{ $forecastIsProjectionOpen ? 'Projection dynamique (période ouverte).' : 'Période clôturée (valeur finale).' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 hidden" data-tab-panel="drift">
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <p class="text-xs uppercase tracking-wide text-slate-500">Alerte de dérive</p>
+                            <p class="mt-2 text-lg font-semibold {{ $driftToneClass }}">{{ $driftTitle }}</p>
+                            <p class="mt-1 text-sm text-slate-600">{{ $driftMessage }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="mono text-sm text-slate-500">Veille</p>
+                            <p class="mono text-lg font-semibold {{ $yesterdayDeltaClass }}">{{ $yesterdayDeltaHours }} h</p>
+                            <p class="mono mt-1 text-sm text-slate-500">7j</p>
+                            <p class="mono text-lg font-semibold {{ $weeklyDeltaClass }}">{{ $weeklyDeltaAverageHours }} h/j</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 hidden" data-tab-panel="focus">
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Score focus</p>
+                        <p class="mono mt-2 text-3xl font-semibold text-slate-900">{{ $focusScore }}/100</p>
+                        <p class="mt-1 text-xs text-slate-600">{{ $focusLabel }}</p>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Top 1 projet</p>
+                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $focusTop1Percent }}%</p>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Top 3 projets</p>
+                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $focusTop3Percent }}%</p>
+                        <p class="mt-1 text-xs text-slate-600">{{ $focusActiveProjects }} projets actifs</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 hidden" data-tab-panel="streak">
+                <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Série actuelle</p>
+                        <p class="mono mt-2 text-3xl font-semibold text-slate-900">{{ $streakCurrentDays }} jours</p>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Meilleure série</p>
+                        <p class="mono mt-2 text-3xl font-semibold text-slate-900">{{ $streakBestDays }} jours</p>
+                    </div>
+                    <div class="rounded-xl border border-slate-200 bg-white p-4">
+                        <p class="text-xs text-slate-500">Constance</p>
+                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $streakConsistencyPercent }}%</p>
+                        <p class="mt-1 text-xs text-slate-600">{{ $streakGoalHitDays }} jours objectif atteint / {{ $streakSyncedDayCount }} jours synchronisés</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 hidden" data-tab-panel="catchup">
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs uppercase tracking-wide text-slate-500">Plan de rattrapage</p>
+                    <p class="mt-2 text-lg font-semibold {{ $catchupToneClass }}">{{ $catchupMessage }}</p>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div>
+                            <p class="text-xs text-slate-500">Heures restantes</p>
+                            <p class="mono mt-1 text-xl font-semibold text-slate-900">{{ $catchupRemainingHours }} h</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500">Jours restants</p>
+                            <p class="mono mt-1 text-xl font-semibold text-slate-900">{{ $catchupRemainingDays }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500">Rythme requis</p>
+                            <p class="mono mt-1 text-xl font-semibold text-slate-900">{{ $catchupHoursPerDay ?? 'n/a' }} h/j</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 

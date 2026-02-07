@@ -230,6 +230,100 @@ class ProductivityDashboardController extends Controller
             (int) $previous7DaysMetrics['total_seconds']
         );
 
+        $periodNaturalEnd = $selectedMonth === null
+            ? $periodStart->endOfYear()
+            : $periodStart->endOfMonth();
+        $isProjectionPeriodOpen = $periodEnd->lt($periodNaturalEnd);
+        $projectionTotalDays = (int) ($periodStart->diffInDays($periodNaturalEnd) + 1);
+        $projectionCurrentSeconds = (int) $periodMetrics['total_seconds'];
+        $projectionTargetSeconds = (int) round(((float) $periodMetrics['daily_goal_hours']) * 3600 * $projectionTotalDays);
+        $projectedTotalSeconds = $isProjectionPeriodOpen && $daysInPeriod > 0
+            ? (int) round(($projectionCurrentSeconds / $daysInPeriod) * $projectionTotalDays)
+            : $projectionCurrentSeconds;
+        $forecastProgressPercent = $projectionTargetSeconds > 0
+            ? ($projectedTotalSeconds / $projectionTargetSeconds) * 100
+            : 0.0;
+        $forecastProgressBarPercent = min(100.0, max(0.0, $forecastProgressPercent));
+        $forecastRemainingSeconds = max(0, $projectionTargetSeconds - $projectedTotalSeconds);
+        $forecastSurplusSeconds = max(0, $projectedTotalSeconds - $projectionTargetSeconds);
+        $forecastScopeLabel = $selectedMonth === null ? 'Projection fin d\'année' : 'Projection fin de mois';
+
+        $driftLevel = 'good';
+        $driftTitle = 'Cadence solide';
+        $driftMessage = 'Tu tiens un rythme stable sur la veille et la tendance 7 jours.';
+        if ($yesterdayDeltaSeconds < 0 && $weeklyDeltaAverageSeconds < 0) {
+            $driftLevel = 'critical';
+            $driftTitle = 'Dérive détectée';
+            $driftMessage = 'Baisse sur la veille et sur la moyenne glissante 7 jours. Il faut corriger rapidement.';
+        } elseif ($yesterdayDeltaSeconds < 0 || $weeklyDeltaAverageSeconds < 0) {
+            $driftLevel = 'warning';
+            $driftTitle = 'Ralentissement léger';
+            $driftMessage = 'Un signal de baisse apparaît. Surveille la prochaine session pour éviter la dérive.';
+        }
+
+        $breakdownProjectsRows = (array) ($periodBreakdown['projects'] ?? []);
+        $breakdownTotalSeconds = max(0, (int) ($periodBreakdown['total_seconds'] ?? 0));
+        $activeProjectsCount = count(array_filter(
+            $breakdownProjectsRows,
+            static fn (array $row): bool => (int) ($row['seconds'] ?? 0) > 0
+        ));
+        $top1Seconds = (int) ($breakdownProjectsRows[0]['seconds'] ?? 0);
+        $top3Seconds = array_sum(array_map(
+            static fn (array $row): int => (int) ($row['seconds'] ?? 0),
+            array_slice($breakdownProjectsRows, 0, 3)
+        ));
+        $focusTop1Percent = $breakdownTotalSeconds > 0 ? ($top1Seconds / $breakdownTotalSeconds) * 100 : 0.0;
+        $focusTop3Percent = $breakdownTotalSeconds > 0 ? ($top3Seconds / $breakdownTotalSeconds) * 100 : 0.0;
+        $focusScoreRaw = ($focusTop3Percent * 0.6) + ($focusTop1Percent * 0.4) - (max(0, $activeProjectsCount - 7) * 2.5);
+        $focusScore = (int) round(min(100, max(0, $focusScoreRaw)));
+        $focusLabel = 'Equilibré';
+        if ($focusScore >= 78) {
+            $focusLabel = 'Laser';
+        } elseif ($focusScore <= 45) {
+            $focusLabel = 'Dispersé';
+        }
+
+        $goalSecondsPerDay = (int) round(((float) $periodMetrics['daily_goal_hours']) * 3600);
+        $syncedHeatDays = array_values(array_filter(
+            (array) ($dailyHeatmap['days'] ?? []),
+            static fn (array $day): bool => (bool) ($day['synced'] ?? false)
+        ));
+        $streakCurrentDays = 0;
+        $streakBestDays = 0;
+        $goalHitDays = 0;
+        foreach ($syncedHeatDays as $day) {
+            $daySeconds = max(0, (int) ($day['seconds'] ?? 0));
+            if ($daySeconds >= $goalSecondsPerDay) {
+                $goalHitDays++;
+                $streakCurrentDays++;
+                $streakBestDays = max($streakBestDays, $streakCurrentDays);
+            } else {
+                $streakCurrentDays = 0;
+            }
+        }
+        $syncedDayCount = count($syncedHeatDays);
+        $streakConsistencyPercent = $syncedDayCount > 0 ? ($goalHitDays / $syncedDayCount) * 100 : 0.0;
+
+        $remainingDaysToNaturalEnd = max(0, (int) $periodEnd->diffInDays($periodNaturalEnd));
+        $catchupRemainingSeconds = max(0, $projectionTargetSeconds - $projectionCurrentSeconds);
+        $catchupHoursPerDay = $remainingDaysToNaturalEnd > 0
+            ? ($catchupRemainingSeconds / 3600) / $remainingDaysToNaturalEnd
+            : null;
+        $catchupState = 'closed';
+        $catchupMessage = 'Période terminée.';
+        if ($isProjectionPeriodOpen) {
+            if ($catchupRemainingSeconds <= 0) {
+                $catchupState = 'ahead';
+                $catchupMessage = 'Tu es déjà au-dessus de la cible sur la période.';
+            } elseif ($remainingDaysToNaturalEnd === 0) {
+                $catchupState = 'today';
+                $catchupMessage = 'Dernier jour: le rattrapage doit se faire aujourd\'hui.';
+            } else {
+                $catchupState = 'pending';
+                $catchupMessage = 'Plan de rattrapage actif sur les jours restants.';
+            }
+        }
+
         return view('cockpit.productivity', [
             'selectedYear' => $selectedYear,
             'selectedMonth' => $selectedMonth,
@@ -254,6 +348,32 @@ class ProductivityDashboardController extends Controller
             'dailyGoalHours' => number_format((float) $periodMetrics['daily_goal_hours'], 2),
             'progressPercent' => number_format($progressPercent, 1),
             'progressBarPercent' => number_format(min(100.0, max(0.0, $progressPercent)), 1),
+            'forecastScopeLabel' => $forecastScopeLabel,
+            'forecastIsProjectionOpen' => $isProjectionPeriodOpen,
+            'forecastProjectedHours' => $this->formatHours($projectedTotalSeconds),
+            'forecastTargetHours' => $this->formatHours($projectionTargetSeconds),
+            'forecastProgressPercent' => number_format($forecastProgressPercent, 1),
+            'forecastProgressBarPercent' => number_format($forecastProgressBarPercent, 1),
+            'forecastRemainingHours' => number_format($forecastRemainingSeconds / 3600, 2),
+            'forecastSurplusHours' => number_format($forecastSurplusSeconds / 3600, 2),
+            'driftLevel' => $driftLevel,
+            'driftTitle' => $driftTitle,
+            'driftMessage' => $driftMessage,
+            'focusScore' => $focusScore,
+            'focusLabel' => $focusLabel,
+            'focusTop1Percent' => number_format($focusTop1Percent, 1),
+            'focusTop3Percent' => number_format($focusTop3Percent, 1),
+            'focusActiveProjects' => $activeProjectsCount,
+            'streakCurrentDays' => $streakCurrentDays,
+            'streakBestDays' => $streakBestDays,
+            'streakGoalHitDays' => $goalHitDays,
+            'streakSyncedDayCount' => $syncedDayCount,
+            'streakConsistencyPercent' => number_format($streakConsistencyPercent, 1),
+            'catchupState' => $catchupState,
+            'catchupMessage' => $catchupMessage,
+            'catchupRemainingHours' => number_format($catchupRemainingSeconds / 3600, 2),
+            'catchupRemainingDays' => $remainingDaysToNaturalEnd,
+            'catchupHoursPerDay' => $catchupHoursPerDay === null ? null : number_format($catchupHoursPerDay, 2),
             'bestMonthLabel' => $bestMonthLabel,
             'bestMonthHours' => $bestMonthHours,
             'activeMonths' => $activeMonths,
