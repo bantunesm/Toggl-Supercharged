@@ -12,6 +12,9 @@
 </head>
 <body class="min-h-screen">
     @php
+        $todayVsYesterdayClass = $todayVsYesterdayDirection === 'hausse'
+            ? 'text-emerald-700'
+            : ($todayVsYesterdayDirection === 'baisse' ? 'text-rose-700' : 'text-slate-700');
         $yesterdayDeltaClass = $yesterdayDeltaDirection === 'hausse'
             ? 'text-emerald-700'
             : ($yesterdayDeltaDirection === 'baisse' ? 'text-rose-700' : 'text-slate-700');
@@ -107,12 +110,13 @@
                     </div>
 
                     <div class="rounded-xl border border-teal-200 bg-white/80 p-3 md:min-w-[220px]">
-                        <p class="text-xs text-slate-500">Veille</p>
-                        <p class="mono mt-1 text-2xl font-semibold text-slate-900">{{ $yesterdayHours }} h</p>
-                        <p class="mono mt-1 text-xs text-slate-600">{{ $yesterdayProgressPercent }}% objectif atteint</p>
+                        <p class="text-xs text-slate-500">Aujourd'hui</p>
+                        <p class="mono mt-1 text-2xl font-semibold text-slate-900">{{ $todayHours }} h</p>
+                        <p class="mono mt-1 text-xs text-slate-600">{{ $todayProgressPercent }}% objectif atteint</p>
                         <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-teal-100">
-                            <div class="h-full rounded-full bg-teal-600" style="width: {{ $yesterdayProgressBarPercent }}%;"></div>
+                            <div class="h-full rounded-full bg-teal-600" style="width: {{ $todayProgressBarPercent }}%;"></div>
                         </div>
+                        <p class="mono mt-2 text-xs {{ $todayVsYesterdayClass }}">vs veille: {{ $todayVsYesterdayPercentLabel }}</p>
                     </div>
                 </div>
             </div>

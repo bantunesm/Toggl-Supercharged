@@ -219,21 +219,30 @@ class ProductivityDashboardController extends Controller
 
         $welcomeTitle = 'Bienvenue monsieur Antunes';
         $motivationMessage = $this->dailyMotivationMessage($today);
+        $todayStart = $today->startOfDay();
         $yesterday = $today->subDay()->startOfDay();
         $dayBeforeYesterday = $yesterday->subDay();
         $last7DaysStart = $yesterday->subDays(6);
         $previous7DaysEnd = $last7DaysStart->subDay();
         $previous7DaysStart = $previous7DaysEnd->subDays(6);
 
+        $todayMetrics = $togglService->getPeriodMetrics($todayStart, $todayStart);
         $yesterdayMetrics = $togglService->getPeriodMetrics($yesterday, $yesterday);
         $dayBeforeYesterdayMetrics = $togglService->getPeriodMetrics($dayBeforeYesterday, $dayBeforeYesterday);
         $last7DaysMetrics = $togglService->getPeriodMetrics($last7DaysStart, $yesterday);
         $previous7DaysMetrics = $togglService->getPeriodMetrics($previous7DaysStart, $previous7DaysEnd);
 
+        $todayTotalSeconds = (int) $todayMetrics['total_seconds'];
+        $todayProgressPercent = (float) $todayMetrics['progress_ratio'] * 100;
+        $todayGoalHours = (float) $todayMetrics['daily_goal_hours'];
+        $todayGoalSeconds = (int) round($todayGoalHours * 3600);
         $yesterdayTotalSeconds = (int) $yesterdayMetrics['total_seconds'];
         $yesterdayProgressPercent = (float) $yesterdayMetrics['progress_ratio'] * 100;
         $yesterdayGoalHours = (float) $yesterdayMetrics['daily_goal_hours'];
         $yesterdayGoalSeconds = (int) round($yesterdayGoalHours * 3600);
+        $todayVsYesterdaySeconds = $todayTotalSeconds - $yesterdayTotalSeconds;
+        $todayVsYesterdayPercent = $this->computeDeltaPercent($todayTotalSeconds, $yesterdayTotalSeconds);
+        $todayVsYesterdayDirection = $todayVsYesterdaySeconds > 0 ? 'hausse' : ($todayVsYesterdaySeconds < 0 ? 'baisse' : 'stable');
         $yesterdayDeltaSeconds = $yesterdayTotalSeconds - (int) $dayBeforeYesterdayMetrics['total_seconds'];
         $yesterdayDeltaPercent = $this->computeDeltaPercent(
             $yesterdayTotalSeconds,
@@ -517,6 +526,17 @@ class ProductivityDashboardController extends Controller
             'countryBenchmarks' => $countryRows,
             'welcomeTitle' => $welcomeTitle,
             'motivationMessage' => $motivationMessage,
+            'todayLabel' => ucfirst($today->locale('fr')->isoFormat('dddd D MMMM YYYY')),
+            'todayHours' => $this->formatHours($todayTotalSeconds),
+            'todayGoalHours' => number_format($todayGoalHours, 2),
+            'todayGoalState' => $todayTotalSeconds >= $todayGoalSeconds ? 'Objectif atteint' : 'Objectif en cours',
+            'todayProgressPercent' => number_format($todayProgressPercent, 1),
+            'todayProgressBarPercent' => number_format(min(100.0, max(0.0, $todayProgressPercent)), 1),
+            'todayVsYesterdayPercent' => $todayVsYesterdayPercent === null ? null : number_format($todayVsYesterdayPercent, 1),
+            'todayVsYesterdayPercentLabel' => $todayVsYesterdayPercent === null
+                ? 'n/a'
+                : (($todayVsYesterdayPercent > 0 ? '+' : '').number_format($todayVsYesterdayPercent, 1).'%' ),
+            'todayVsYesterdayDirection' => $todayVsYesterdayDirection,
             'yesterdayLabel' => ucfirst($yesterday->locale('fr')->isoFormat('dddd D MMMM YYYY')),
             'yesterdayHours' => $this->formatHours($yesterdayTotalSeconds),
             'yesterdayGoalHours' => number_format($yesterdayGoalHours, 2),
