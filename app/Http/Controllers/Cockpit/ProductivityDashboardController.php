@@ -95,8 +95,22 @@ class ProductivityDashboardController extends Controller
         $allTimeRecords = $togglService->getAllTimeRecords();
 
         $daysInPeriod = (int) $periodMetrics['days_in_period'];
-        $previousPeriodEnd = $periodStart->subDay();
-        $previousPeriodStart = $previousPeriodEnd->subDays($daysInPeriod - 1);
+        if ($isYearlyView) {
+            // In yearly view, always compare against the full previous calendar year.
+            $previousPeriodStart = CarbonImmutable::create(
+                (int) $periodStart->year - 1,
+                1,
+                1,
+                0,
+                0,
+                0,
+                config('app.timezone')
+            )->startOfYear();
+            $previousPeriodEnd = $previousPeriodStart->endOfYear();
+        } else {
+            $previousPeriodEnd = $periodStart->subDay();
+            $previousPeriodStart = $previousPeriodEnd->subDays($daysInPeriod - 1);
+        }
         $previousPeriodMetrics = $togglService->getPeriodMetrics($previousPeriodStart, $previousPeriodEnd);
 
         $deltaTotalSeconds = (int) $periodMetrics['total_seconds'] - (int) $previousPeriodMetrics['total_seconds'];
@@ -104,7 +118,6 @@ class ProductivityDashboardController extends Controller
             (int) $periodMetrics['total_seconds'],
             (int) $previousPeriodMetrics['total_seconds']
         );
-        $deltaAverageSeconds = (float) $periodMetrics['daily_average_seconds'] - (float) $previousPeriodMetrics['daily_average_seconds'];
 
         $monthlyEvolution = $togglService->getMonthlyEvolution($selectedYear, $today);
         $historyYears = max(3, (int) config('toggl.history_years', 5));
@@ -117,11 +130,15 @@ class ProductivityDashboardController extends Controller
         $monthlyHours = array_map(fn (int $seconds): float => round($seconds / 3600, 2), $monthlyEvolution['seconds']);
         $yearlyHours = array_map(fn (int $seconds): float => round($seconds / 3600, 2), $yearlyEvolution['seconds']);
         $progressPercent = $periodMetrics['progress_ratio'] * 100;
-
-        $bestMonthIndex = array_search(max($monthlyEvolution['seconds']), $monthlyEvolution['seconds'], true);
-        $bestMonthLabel = $bestMonthIndex !== false ? $monthlyEvolution['labels'][$bestMonthIndex] : '-';
-        $bestMonthHours = $bestMonthIndex !== false ? number_format($monthlyHours[$bestMonthIndex], 2) : '0.00';
-        $activeMonths = count(array_filter($monthlyEvolution['seconds'], static fn (int $seconds): bool => $seconds > 0));
+        $kpiDaysInPeriod = $daysInPeriod;
+        $kpiDailyAverageSeconds = (float) $periodMetrics['daily_average_seconds'];
+        $kpiProgressPercent = $progressPercent;
+        if ($isYearlyView && $selectedYear === $currentYear) {
+            $elapsedPeriodMetrics = $togglService->getPeriodMetrics($periodStart, $today);
+            $kpiDaysInPeriod = (int) $elapsedPeriodMetrics['days_in_period'];
+            $kpiDailyAverageSeconds = (float) $elapsedPeriodMetrics['daily_average_seconds'];
+            $kpiProgressPercent = (float) $elapsedPeriodMetrics['progress_ratio'] * 100;
+        }
 
         $monthRows = [];
         $yearTotalSeconds = array_sum($monthlyEvolution['seconds']);
@@ -170,7 +187,7 @@ class ProductivityDashboardController extends Controller
         $yearsForSelect = range($currentYear, $minYear);
         $monthsForSelect = $this->monthOptions();
         $comparisonDirection = $deltaTotalSeconds >= 0 ? 'hausse' : 'baisse';
-        $currentDailyAverageHours = (float) $periodMetrics['daily_average_seconds'] / 3600;
+        $currentDailyAverageHours = $kpiDailyAverageSeconds / 3600;
         $entrepreneurRows = $this->buildBenchmarkRows($currentDailyAverageHours, $this->entrepreneurBenchmarks());
         $countryRows = $this->buildBenchmarkRows($currentDailyAverageHours, $this->countryBenchmarks());
 
@@ -228,6 +245,48 @@ class ProductivityDashboardController extends Controller
         $weeklyDeltaPercent = $this->computeDeltaPercent(
             (int) $last7DaysMetrics['total_seconds'],
             (int) $previous7DaysMetrics['total_seconds']
+        );
+        $deltaAverageSeconds = $kpiDailyAverageSeconds - (float) $previousPeriodMetrics['daily_average_seconds'];
+        $deltaAveragePercent = ((float) $previousPeriodMetrics['daily_average_seconds']) > 0
+            ? (
+                (
+                    $kpiDailyAverageSeconds
+                    - (float) $previousPeriodMetrics['daily_average_seconds']
+                ) / (float) $previousPeriodMetrics['daily_average_seconds']
+            ) * 100
+            : null;
+        $previousProgressPercent = ((float) $previousPeriodMetrics['progress_ratio']) * 100;
+        $progressDeltaPoints = $kpiProgressPercent - $previousProgressPercent;
+        $progressDeltaPercent = $previousProgressPercent > 0
+            ? ($progressDeltaPoints / $previousProgressPercent) * 100
+            : null;
+
+        if ($isYearlyView) {
+            $currentPeriodPeakMonth = $this->summarizePeakMonthFromMonthlyEvolution(
+                $selectedYear,
+                (array) $monthlyEvolution['seconds']
+            );
+            $previousYearMonthlyEvolution = $togglService->getMonthlyEvolution($selectedYear - 1, $today);
+            $previousPeriodPeakMonth = $this->summarizePeakMonthFromMonthlyEvolution(
+                $selectedYear - 1,
+                (array) $previousYearMonthlyEvolution['seconds']
+            );
+        } else {
+            $currentPeriodPeakMonth = $this->summarizePeakMonthUsingPeriodMetrics(
+                $togglService,
+                $periodStart,
+                $periodEnd
+            );
+            $previousPeriodPeakMonth = $this->summarizePeakMonthUsingPeriodMetrics(
+                $togglService,
+                $previousPeriodStart,
+                $previousPeriodEnd
+            );
+        }
+        $peakMonthDeltaSeconds = (int) $currentPeriodPeakMonth['best_seconds'] - (int) $previousPeriodPeakMonth['best_seconds'];
+        $peakMonthDeltaPercent = $this->computeDeltaPercent(
+            (int) $currentPeriodPeakMonth['best_seconds'],
+            (int) $previousPeriodPeakMonth['best_seconds']
         );
 
         $periodNaturalEnd = $selectedMonth === null
@@ -342,12 +401,32 @@ class ProductivityDashboardController extends Controller
             'periodLabel' => $periodLabel,
             'startDate' => $this->formatDateForDisplay((string) $periodMetrics['start_date']),
             'endDate' => $this->formatDateForDisplay((string) $periodMetrics['end_date']),
-            'daysInPeriod' => $daysInPeriod,
+            'daysInPeriod' => $kpiDaysInPeriod,
             'totalHours' => $this->formatHours((int) $periodMetrics['total_seconds']),
-            'dailyAverageHours' => $this->formatHours((float) $periodMetrics['daily_average_seconds']),
+            'previousTotalHours' => $this->formatHours((int) $previousPeriodMetrics['total_seconds']),
+            'totalVariationHours' => $this->formatSignedHours($deltaTotalSeconds),
+            'totalVariationPercent' => $deltaTotalPercent === null ? null : number_format($deltaTotalPercent, 1),
+            'totalVariationPercentLabel' => $deltaTotalPercent === null
+                ? 'n/a'
+                : (($deltaTotalPercent > 0 ? '+' : '').number_format($deltaTotalPercent, 1).'%' ),
+            'dailyAverageHours' => $this->formatHours($kpiDailyAverageSeconds),
+            'previousDailyAverageHours' => $this->formatHours((float) $previousPeriodMetrics['daily_average_seconds']),
+            'dailyAverageVariationHours' => $this->formatSignedHours($deltaAverageSeconds),
+            'dailyAverageVariationPercent' => $deltaAveragePercent === null ? null : number_format($deltaAveragePercent, 1),
+            'dailyAverageVariationPercentLabel' => $deltaAveragePercent === null
+                ? 'n/a'
+                : (($deltaAveragePercent > 0 ? '+' : '').number_format($deltaAveragePercent, 1).'%' ),
             'dailyGoalHours' => number_format((float) $periodMetrics['daily_goal_hours'], 2),
-            'progressPercent' => number_format($progressPercent, 1),
-            'progressBarPercent' => number_format(min(100.0, max(0.0, $progressPercent)), 1),
+            'progressPercent' => number_format($kpiProgressPercent, 1),
+            'previousProgressPercent' => number_format($previousProgressPercent, 1),
+            'progressVariationPoints' => ($progressDeltaPoints > 0 ? '+' : '').number_format($progressDeltaPoints, 1),
+            'progressVariationPercent' => $progressDeltaPercent === null
+                ? null
+                : (($progressDeltaPercent > 0 ? '+' : '').number_format($progressDeltaPercent, 1)),
+            'progressVariationPercentLabel' => $progressDeltaPercent === null
+                ? 'n/a'
+                : (($progressDeltaPercent > 0 ? '+' : '').number_format($progressDeltaPercent, 1).'%' ),
+            'progressBarPercent' => number_format(min(100.0, max(0.0, $kpiProgressPercent)), 1),
             'forecastScopeLabel' => $forecastScopeLabel,
             'forecastIsProjectionOpen' => $isProjectionPeriodOpen,
             'forecastProjectedHours' => $this->formatHours($projectedTotalSeconds),
@@ -374,9 +453,15 @@ class ProductivityDashboardController extends Controller
             'catchupRemainingHours' => number_format($catchupRemainingSeconds / 3600, 2),
             'catchupRemainingDays' => $remainingDaysToNaturalEnd,
             'catchupHoursPerDay' => $catchupHoursPerDay === null ? null : number_format($catchupHoursPerDay, 2),
-            'bestMonthLabel' => $bestMonthLabel,
-            'bestMonthHours' => $bestMonthHours,
-            'activeMonths' => $activeMonths,
+            'bestMonthLabel' => (string) $currentPeriodPeakMonth['best_label'],
+            'bestMonthHours' => $this->formatHours((int) $currentPeriodPeakMonth['best_seconds']),
+            'previousBestMonthHours' => $this->formatHours((int) $previousPeriodPeakMonth['best_seconds']),
+            'activeMonths' => (int) $currentPeriodPeakMonth['active_months'],
+            'bestMonthVariationHours' => $this->formatSignedHours($peakMonthDeltaSeconds),
+            'bestMonthVariationPercent' => $peakMonthDeltaPercent === null ? null : number_format($peakMonthDeltaPercent, 1),
+            'bestMonthVariationPercentLabel' => $peakMonthDeltaPercent === null
+                ? 'n/a'
+                : (($peakMonthDeltaPercent > 0 ? '+' : '').number_format($peakMonthDeltaPercent, 1).'%' ),
             'monthlyChartLabels' => $monthlyEvolution['labels'],
             'monthlyChartHours' => $monthlyHours,
             'yearlyChartLabels' => $yearlyEvolution['labels'],
@@ -470,6 +555,96 @@ class ProductivityDashboardController extends Controller
                 ->locale('fr')
                 ->isoFormat('D MMMM YYYY')
         );
+    }
+
+    /**
+     * @return array{best_seconds: int, best_label: string, active_months: int}
+     */
+    private function summarizePeakMonthUsingPeriodMetrics(
+        TogglService $togglService,
+        CarbonImmutable $rangeStart,
+        CarbonImmutable $rangeEnd
+    ): array
+    {
+        $monthTotals = [];
+        $cursor = $rangeStart->startOfMonth();
+        while ($cursor->lte($rangeEnd)) {
+            $segmentStart = $cursor->lt($rangeStart) ? $rangeStart : $cursor;
+            $segmentEnd = $cursor->endOfMonth()->gt($rangeEnd) ? $rangeEnd : $cursor->endOfMonth();
+            $metrics = $togglService->getPeriodMetrics($segmentStart, $segmentEnd);
+            $monthTotals[] = [
+                'month_start' => $cursor,
+                'seconds' => max(0, (int) ($metrics['total_seconds'] ?? 0)),
+            ];
+
+            $cursor = $cursor->addMonthNoOverflow()->startOfMonth();
+        }
+
+        if ($monthTotals === []) {
+            return [
+                'best_seconds' => 0,
+                'best_label' => '-',
+                'active_months' => 0,
+            ];
+        }
+
+        usort($monthTotals, static fn (array $left, array $right): int => $right['seconds'] <=> $left['seconds']);
+        $bestMonth = $monthTotals[0];
+        $bestMonthStart = $bestMonth['month_start'];
+        $activeMonths = count(array_filter(
+            $monthTotals,
+            static fn (array $month): bool => (int) $month['seconds'] > 0
+        ));
+
+        return [
+            'best_seconds' => (int) $bestMonth['seconds'],
+            'best_label' => ucfirst(
+                $bestMonthStart
+                    ->locale('fr')
+                    ->isoFormat('MMMM YYYY')
+            ),
+            'active_months' => $activeMonths,
+        ];
+    }
+
+    /**
+     * @param array<int, int> $secondsByMonth
+     * @return array{best_seconds: int, best_label: string, active_months: int}
+     */
+    private function summarizePeakMonthFromMonthlyEvolution(int $year, array $secondsByMonth): array
+    {
+        $normalizedSeconds = array_values(array_map(
+            static fn (int $seconds): int => max(0, $seconds),
+            $secondsByMonth
+        ));
+
+        if ($normalizedSeconds === []) {
+            return [
+                'best_seconds' => 0,
+                'best_label' => '-',
+                'active_months' => 0,
+            ];
+        }
+
+        $activeMonths = count(array_filter($normalizedSeconds, static fn (int $seconds): bool => $seconds > 0));
+        if ($activeMonths === 0) {
+            return [
+                'best_seconds' => 0,
+                'best_label' => '-',
+                'active_months' => 0,
+            ];
+        }
+
+        $bestSeconds = max($normalizedSeconds);
+        $bestMonthIndex = array_search($bestSeconds, $normalizedSeconds, true);
+        $bestMonth = ($bestMonthIndex === false ? 0 : (int) $bestMonthIndex) + 1;
+        $bestMonthStart = CarbonImmutable::create($year, $bestMonth, 1, 0, 0, 0, config('app.timezone'))->startOfMonth();
+
+        return [
+            'best_seconds' => $bestSeconds,
+            'best_label' => ucfirst($bestMonthStart->locale('fr')->isoFormat('MMMM YYYY')),
+            'active_months' => $activeMonths,
+        ];
     }
 
     private function computeDeltaPercent(int $current, int $previous): ?float
@@ -694,9 +869,7 @@ class ProductivityDashboardController extends Controller
     {
         if ($month === null) {
             $start = CarbonImmutable::create($year, 1, 1, 0, 0, 0, config('app.timezone'))->startOfYear();
-            $end = $year === (int) $today->year
-                ? $today
-                : $start->endOfYear();
+            $end = $start->endOfYear();
 
             return [$start, $end, sprintf('Année %d', $year)];
         }

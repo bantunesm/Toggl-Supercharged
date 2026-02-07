@@ -131,28 +131,67 @@
         @endif
 
         <section class="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            @php
+                $totalVariationClass = str_starts_with($totalVariationHours, '+')
+                    ? 'text-emerald-700'
+                    : (str_starts_with($totalVariationHours, '-') ? 'text-rose-700' : 'text-slate-500');
+                $avgVariationClass = str_starts_with($dailyAverageVariationHours, '+')
+                    ? 'text-emerald-700'
+                    : (str_starts_with($dailyAverageVariationHours, '-') ? 'text-rose-700' : 'text-slate-500');
+                $progressVariationClass = str_starts_with($progressVariationPoints, '+')
+                    ? 'text-emerald-700'
+                    : (str_starts_with($progressVariationPoints, '-') ? 'text-rose-700' : 'text-slate-500');
+                $bestMonthVariationClass = str_starts_with($bestMonthVariationHours, '+')
+                    ? 'text-emerald-700'
+                    : (str_starts_with($bestMonthVariationHours, '-') ? 'text-rose-700' : 'text-slate-500');
+                $previousScoreLabel = $isYearlyView ? 'N-1' : 'M-1';
+            @endphp
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <p class="text-sm text-slate-500">Temps total</p>
                 <p class="mt-2 text-3xl font-bold text-slate-900">{{ $totalHours }} h</p>
                 <p class="mono mt-2 text-xs text-slate-400">{{ $startDate }} → {{ $endDate }}</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $totalVariationClass }} {{ str_starts_with($totalVariationHours, '+') ? 'border-emerald-200 bg-emerald-50' : (str_starts_with($totalVariationHours, '-') ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
+                        {{ $totalVariationPercentLabel }}
+                    </span>
+                    <span class="mono text-xs text-slate-400">{{ $previousScoreLabel }}: {{ $previousTotalHours }} h</span>
+                </div>
             </article>
 
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <p class="text-sm text-slate-500">Moyenne journalière réelle</p>
                 <p class="mt-2 text-3xl font-bold text-slate-900">{{ $dailyAverageHours }} h/j</p>
                 <p class="mono mt-2 text-xs text-slate-400">Total / {{ $daysInPeriod }} jours</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $avgVariationClass }} {{ str_starts_with($dailyAverageVariationHours, '+') ? 'border-emerald-200 bg-emerald-50' : (str_starts_with($dailyAverageVariationHours, '-') ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
+                        {{ $dailyAverageVariationPercentLabel }}
+                    </span>
+                    <span class="mono text-xs text-slate-400">{{ $previousScoreLabel }}: {{ $previousDailyAverageHours }} h/j</span>
+                </div>
             </article>
 
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <p class="text-sm text-slate-500">Objectif atteint</p>
                 <p class="mt-2 text-3xl font-bold text-slate-900">{{ $progressPercent }}%</p>
                 <p class="mono mt-2 text-xs text-slate-400">Objectif: {{ $dailyGoalHours }} h/j</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $progressVariationClass }} {{ str_starts_with($progressVariationPoints, '+') ? 'border-emerald-200 bg-emerald-50' : (str_starts_with($progressVariationPoints, '-') ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
+                        {{ $progressVariationPercentLabel }}
+                    </span>
+                    <span class="mono text-xs text-slate-400">{{ $previousScoreLabel }}: {{ $previousProgressPercent }}%</span>
+                </div>
             </article>
 
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <p class="text-sm text-slate-500">Mois le plus fort</p>
                 <p class="mt-2 text-3xl font-bold text-slate-900">{{ $bestMonthHours }} h</p>
                 <p class="mono mt-2 text-xs text-slate-400">{{ strtoupper($bestMonthLabel) }} · {{ $activeMonths }} mois actifs</p>
+                <div class="mt-2 flex flex-wrap items-center gap-2">
+                    <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $bestMonthVariationClass }} {{ str_starts_with($bestMonthVariationHours, '+') ? 'border-emerald-200 bg-emerald-50' : (str_starts_with($bestMonthVariationHours, '-') ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
+                        {{ $bestMonthVariationPercentLabel }}
+                    </span>
+                    <span class="mono text-xs text-slate-400">{{ $previousScoreLabel }}: {{ $previousBestMonthHours }} h</span>
+                </div>
             </article>
         </section>
 
