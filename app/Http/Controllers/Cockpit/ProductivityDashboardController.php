@@ -197,7 +197,7 @@ class ProductivityDashboardController extends Controller
 
         $trackingSince = $allTimeRecords['tracking_since'];
         $trackingSinceLabel = $trackingSince !== null
-            ? ucfirst(CarbonImmutable::parse($trackingSince, config('app.timezone'))->locale('fr')->isoFormat('D MMM YYYY'))
+            ? $this->formatDateForDisplay((string) $trackingSince)
             : null;
 
         $welcomeTitle = 'Bienvenue monsieur Antunes';
@@ -246,8 +246,8 @@ class ProductivityDashboardController extends Controller
             'yearsForSelect' => $yearsForSelect,
             'monthsForSelect' => $monthsForSelect,
             'periodLabel' => $periodLabel,
-            'startDate' => $periodMetrics['start_date'],
-            'endDate' => $periodMetrics['end_date'],
+            'startDate' => $this->formatDateForDisplay((string) $periodMetrics['start_date']),
+            'endDate' => $this->formatDateForDisplay((string) $periodMetrics['end_date']),
             'daysInPeriod' => $daysInPeriod,
             'totalHours' => $this->formatHours((int) $periodMetrics['total_seconds']),
             'dailyAverageHours' => $this->formatHours((float) $periodMetrics['daily_average_seconds']),
@@ -265,11 +265,11 @@ class ProductivityDashboardController extends Controller
             'periodBreakdownClients' => $periodBreakdown['clients'],
             'periodBreakdownProjects' => $periodBreakdown['projects'],
             'periodBreakdownTotalHours' => $this->formatHours((int) $periodBreakdown['total_seconds']),
-            'periodBreakdownHasData' => count($periodBreakdown['projects']) > 0,
+            'periodBreakdownHasData' => count((array) ($periodBreakdown['projects'] ?? [])) > 0,
             'comparisonLabel' => sprintf(
                 'Période précédente: %s → %s',
-                $previousPeriodStart->toDateString(),
-                $previousPeriodEnd->toDateString()
+                $this->formatDateForDisplay($previousPeriodStart->toDateString()),
+                $this->formatDateForDisplay($previousPeriodEnd->toDateString())
             ),
             'comparisonDirection' => $comparisonDirection,
             'comparisonTotalDeltaHours' => $this->formatSignedHours($deltaTotalSeconds),
@@ -288,10 +288,11 @@ class ProductivityDashboardController extends Controller
             'heatmapSyncBudget' => $heatmapSyncBudget,
             'syncedAt' => CarbonImmutable::parse($periodMetrics['synced_at'])
                 ->setTimezone('Europe/Paris')
-                ->format('Y-m-d H:i:s').' (Europe/Paris)',
+                ->locale('fr')
+                ->isoFormat('D MMMM YYYY [à] HH:mm').' (Europe/Paris)',
             'allTimeDayRecordHours' => $allTimeDayRecord !== null ? $this->formatHours((int) $allTimeDayRecord['seconds']) : null,
             'allTimeDayRecordDate' => $allTimeDayRecord !== null
-                ? ucfirst(CarbonImmutable::parse($allTimeDayRecord['date'], config('app.timezone'))->locale('fr')->isoFormat('D MMM YYYY'))
+                ? $this->formatDateForDisplay((string) $allTimeDayRecord['date'])
                 : null,
             'allTimeMonthRecordHours' => $allTimeMonthRecord !== null ? $this->formatHours((int) $allTimeMonthRecord['seconds']) : null,
             'allTimeMonthRecordDate' => $allTimeMonthRecord !== null
@@ -340,6 +341,15 @@ class ProductivityDashboardController extends Controller
         $prefix = $hours > 0 ? '+' : '';
 
         return $prefix.number_format($hours, 2);
+    }
+
+    private function formatDateForDisplay(string $date): string
+    {
+        return ucfirst(
+            CarbonImmutable::parse($date, config('app.timezone'))
+                ->locale('fr')
+                ->isoFormat('D MMMM YYYY')
+        );
     }
 
     private function computeDeltaPercent(int $current, int $previous): ?float

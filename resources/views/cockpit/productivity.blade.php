@@ -222,7 +222,7 @@
                                     <div class="relative h-3 w-[11px]">
                                         @if ($monthLabel !== '')
                                             <span class="absolute left-0 top-0 whitespace-nowrap text-[10px] leading-3 text-slate-500">
-                                                {{ strtoupper($monthLabel) }}
+                                                {{ $monthLabel }}
                                             </span>
                                         @endif
                                     </div>
@@ -272,7 +272,7 @@
             </article>
         </section>
 
-        <section class="mt-6 grid gap-4 xl:grid-cols-2">
+        <section id="time-breakdown" class="mt-6 grid gap-4 xl:grid-cols-2">
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm" data-tabs-widget>
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
@@ -286,46 +286,23 @@
                     <button
                         type="button"
                         data-tab-button
-                        data-tab-target="clients"
-                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700"
-                    >
-                        Par client
-                    </button>
-                    <button
-                        type="button"
-                        data-tab-button
                         data-tab-target="projects"
                         class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700"
                     >
                         Par projet
                     </button>
+                    <button
+                        type="button"
+                        data-tab-button
+                        data-tab-target="clients"
+                        class="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-teal-600 hover:text-teal-700"
+                    >
+                        Par client
+                    </button>
                 </div>
 
                 @if ($periodBreakdownHasData)
-                    <div class="mt-4 overflow-x-auto" data-tab-panel="clients">
-                        <table class="min-w-full divide-y divide-slate-200 text-sm">
-                            <thead class="bg-slate-50">
-                                <tr>
-                                    <th class="px-4 py-3 text-left font-semibold text-slate-700">Client</th>
-                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Heures</th>
-                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Part</th>
-                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Projets</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100 bg-white">
-                                @foreach ($periodBreakdownClients as $row)
-                                    <tr class="hover:bg-slate-50/80">
-                                        <td class="px-4 py-3 font-medium text-slate-700">{{ $row['name'] }}</td>
-                                        <td class="mono px-4 py-3 text-right text-slate-900">{{ $row['hours'] }} h</td>
-                                        <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['share_percent'] }}%</td>
-                                        <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['project_count'] }}</td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div class="mt-4 hidden overflow-x-auto" data-tab-panel="projects">
+                    <div class="mt-4 overflow-x-auto" data-tab-panel="projects" data-pagination-panel data-page-size="6">
                         <table class="min-w-full divide-y divide-slate-200 text-sm">
                             <thead class="bg-slate-50">
                                 <tr>
@@ -346,6 +323,69 @@
                                 @endforeach
                             </tbody>
                         </table>
+                        <div class="mt-3 flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between" data-pagination-controls>
+                            <span class="mono" data-pagination-range></span>
+                            <div class="inline-flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    data-page-action="prev"
+                                    class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                >
+                                    ← Précédent
+                                </button>
+                                <span class="mono" data-pagination-label></span>
+                                <button
+                                    type="button"
+                                    data-page-action="next"
+                                    class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                >
+                                    Suivant →
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 hidden overflow-x-auto" data-tab-panel="clients" data-pagination-panel data-page-size="6">
+                        <table class="min-w-full divide-y divide-slate-200 text-sm">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-semibold text-slate-700">Client</th>
+                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Heures</th>
+                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Part</th>
+                                    <th class="px-4 py-3 text-right font-semibold text-slate-700">Projets</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 bg-white">
+                                @foreach ($periodBreakdownClients as $row)
+                                    <tr class="hover:bg-slate-50/80">
+                                        <td class="px-4 py-3 font-medium text-slate-700">{{ $row['name'] }}</td>
+                                        <td class="mono px-4 py-3 text-right text-slate-900">{{ $row['hours'] }} h</td>
+                                        <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['share_percent'] }}%</td>
+                                        <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['project_count'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                        <div class="mt-3 flex flex-col gap-2 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between" data-pagination-controls>
+                            <span class="mono" data-pagination-range></span>
+                            <div class="inline-flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    data-page-action="prev"
+                                    class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                >
+                                    ← Précédent
+                                </button>
+                                <span class="mono" data-pagination-label></span>
+                                <button
+                                    type="button"
+                                    data-page-action="next"
+                                    class="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                                >
+                                    Suivant →
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 @else
                     <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
@@ -400,7 +440,10 @@
                                         : ($row['delta_direction'] === 'en-dessous' ? 'text-amber-700' : 'text-slate-600');
                                 @endphp
                                 <tr class="hover:bg-slate-50/80">
-                                    <td class="px-4 py-3 font-medium text-slate-700">{{ $row['name'] }}<p class="mt-1 text-xs text-slate-500">{{ $row['note'] }}</p></td>
+                                    <td class="px-4 py-3 font-medium text-slate-700">
+                                        {{ $row['name'] }}
+                                        <p class="mt-1 text-xs text-slate-500">{{ $row['note'] }}</p>
+                                    </td>
                                     <td class="mono px-4 py-3 text-right text-slate-900">{{ $row['daily_hours'] }}</td>
                                     <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['relative_percent'] }}%</td>
                                     <td class="mono px-4 py-3 text-right {{ $deltaClass }}">{{ $row['delta_hours'] }} h ({{ $row['delta_direction'] }})</td>
@@ -428,7 +471,10 @@
                                         : ($row['delta_direction'] === 'en-dessous' ? 'text-amber-700' : 'text-slate-600');
                                 @endphp
                                 <tr class="hover:bg-slate-50/80">
-                                    <td class="px-4 py-3 font-medium text-slate-700">{{ $row['name'] }}<p class="mt-1 text-xs text-slate-500">{{ $row['note'] }}</p></td>
+                                    <td class="px-4 py-3 font-medium text-slate-700">
+                                        {{ $row['name'] }}
+                                        <p class="mt-1 text-xs text-slate-500">{{ $row['note'] }}</p>
+                                    </td>
                                     <td class="mono px-4 py-3 text-right text-slate-900">{{ $row['daily_hours'] }}</td>
                                     <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['relative_percent'] }}%</td>
                                     <td class="mono px-4 py-3 text-right {{ $deltaClass }}">{{ $row['delta_hours'] }} h ({{ $row['delta_direction'] }})</td>
@@ -472,7 +518,7 @@
                     <tbody class="divide-y divide-slate-100 bg-white">
                         @foreach ($monthRows as $row)
                             <tr class="hover:bg-slate-50/80">
-                                <td class="px-4 py-3 font-medium text-slate-700">{{ strtoupper($row['label']) }}</td>
+                                <td class="px-4 py-3 font-medium text-slate-700">{{ ucfirst($row['label']) }}</td>
                                 <td class="mono px-4 py-3 text-right text-slate-900">{{ $row['hours'] }} h</td>
                                 <td class="mono px-4 py-3 text-right text-slate-600">{{ $row['share_percent'] }}%</td>
                             </tr>

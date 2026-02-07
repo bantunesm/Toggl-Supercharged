@@ -120,85 +120,182 @@ const initCockpitProductivityPage = () => {
             button.addEventListener('click', () => activateTab(button.dataset.tabTarget));
         });
 
-        activateTab(buttons[0].dataset.tabTarget);
+        const preferredTab = widget.dataset.initialTab ?? '';
+        const hasPreferredTab = buttons.some((button) => button.dataset.tabTarget === preferredTab);
+        const initialTabTarget = hasPreferredTab ? preferredTab : buttons[0].dataset.tabTarget;
+        activateTab(initialTabTarget);
     });
 
-    if (typeof window.Chart !== 'function') {
-        return;
-    }
+    document.querySelectorAll('[data-pagination-panel]').forEach((panel) => {
+        const rows = Array.from(panel.querySelectorAll('tbody tr'));
+        const controls = panel.querySelector('[data-pagination-controls]');
+        const rangeElement = controls?.querySelector('[data-pagination-range]');
+        const labelElement = controls?.querySelector('[data-pagination-label]');
+        const prevButton = controls?.querySelector('[data-page-action="prev"]');
+        const nextButton = controls?.querySelector('[data-page-action="next"]');
+        const pageSize = Math.max(1, Number.parseInt(panel.dataset.pageSize ?? '6', 10) || 6);
 
-    const axisColor = '#334155';
-    const gridColor = 'rgba(100, 116, 139, 0.16)';
+        if (rows.length === 0 || !controls || !prevButton || !nextButton) {
+            return;
+        }
+
+        const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+        let currentPage = 1;
+
+        const renderPage = () => {
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = startIndex + pageSize;
+
+            rows.forEach((row, index) => {
+                const isVisible = index >= startIndex && index < endIndex;
+                row.classList.toggle('hidden', !isVisible);
+            });
+
+            const from = startIndex + 1;
+            const to = Math.min(rows.length, endIndex);
+
+            if (rangeElement) {
+                rangeElement.textContent = `Lignes ${from}-${to} sur ${rows.length}`;
+            }
+
+            if (labelElement) {
+                labelElement.textContent = `Page ${currentPage}/${totalPages}`;
+            }
+
+            prevButton.disabled = currentPage <= 1;
+            nextButton.disabled = currentPage >= totalPages;
+            controls.classList.toggle('hidden', rows.length <= pageSize);
+        };
+
+        prevButton.addEventListener('click', () => {
+            if (currentPage <= 1) {
+                return;
+            }
+
+            currentPage -= 1;
+            renderPage();
+        });
+
+        nextButton.addEventListener('click', () => {
+            if (currentPage >= totalPages) {
+                return;
+            }
+
+            currentPage += 1;
+            renderPage();
+        });
+
+        renderPage();
+    });
+
+    const chartPalette = {
+        axisColor: '#334155',
+        gridColor: 'rgba(100, 116, 139, 0.16)',
+        monthlyBar: 'rgba(15, 118, 110, 0.76)',
+        monthlyHover: 'rgba(13, 148, 136, 0.88)',
+        yearlyLine: '#0e7490',
+        yearlyFill: 'rgba(14, 116, 144, 0.15)',
+        yearlyPoint: '#0e7490',
+    };
+
     const monthlyChartCanvas = document.getElementById('monthlyChart');
     const yearlyChartCanvas = document.getElementById('yearlyChart');
+    let monthlyChart = null;
+    let yearlyChart = null;
 
-    if (monthlyChartCanvas) {
-        new window.Chart(monthlyChartCanvas, {
-            type: 'bar',
-            data: {
-                labels: monthlyLabels,
-                datasets: [{
-                    label: 'Heures',
-                    data: monthlyHours,
-                    borderRadius: 8,
-                    backgroundColor: 'rgba(15, 118, 110, 0.76)',
-                    hoverBackgroundColor: 'rgba(13, 148, 136, 0.88)',
-                }],
-            },
-            options: {
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor },
-                        ticks: { color: axisColor },
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: axisColor },
-                    },
-                },
-            },
-        });
-    }
+    const renderCharts = () => {
+        if (typeof window.Chart !== 'function') {
+            return false;
+        }
 
-    if (yearlyChartCanvas) {
-        new window.Chart(yearlyChartCanvas, {
-            type: 'line',
-            data: {
-                labels: yearlyLabels,
-                datasets: [{
-                    label: 'Heures',
-                    data: yearlyHours,
-                    borderColor: '#0e7490',
-                    backgroundColor: 'rgba(14, 116, 144, 0.15)',
-                    fill: true,
-                    tension: 0.35,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#0e7490',
-                }],
-            },
-            options: {
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
+        const palette = chartPalette;
+
+        if (monthlyChartCanvas && monthlyChart === null) {
+            monthlyChart = new window.Chart(monthlyChartCanvas, {
+                type: 'bar',
+                data: {
+                    labels: monthlyLabels,
+                    datasets: [{
+                        label: 'Heures',
+                        data: monthlyHours,
+                        borderRadius: 8,
+                        backgroundColor: palette.monthlyBar,
+                        hoverBackgroundColor: palette.monthlyHover,
+                    }],
                 },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: gridColor },
-                        ticks: { color: axisColor },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
                     },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: axisColor },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: palette.gridColor },
+                            ticks: { color: palette.axisColor },
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: palette.axisColor },
+                        },
                     },
                 },
-            },
-        });
+            });
+        }
+
+        if (yearlyChartCanvas && yearlyChart === null) {
+            yearlyChart = new window.Chart(yearlyChartCanvas, {
+                type: 'line',
+                data: {
+                    labels: yearlyLabels,
+                    datasets: [{
+                        label: 'Heures',
+                        data: yearlyHours,
+                        borderColor: palette.yearlyLine,
+                        backgroundColor: palette.yearlyFill,
+                        fill: true,
+                        tension: 0.35,
+                        pointRadius: 4,
+                        pointBackgroundColor: palette.yearlyPoint,
+                    }],
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: palette.gridColor },
+                            ticks: { color: palette.axisColor },
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: palette.axisColor },
+                        },
+                    },
+                },
+            });
+        }
+
+        return monthlyChart !== null || yearlyChart !== null;
+    };
+
+    if (!renderCharts()) {
+        let attempts = 0;
+        const maxAttempts = 40;
+        const intervalId = window.setInterval(() => {
+            attempts += 1;
+            if (renderCharts() || attempts >= maxAttempts) {
+                window.clearInterval(intervalId);
+            }
+        }, 125);
+
+        window.addEventListener('load', () => {
+            renderCharts();
+            window.clearInterval(intervalId);
+        }, { once: true });
     }
 };
 
