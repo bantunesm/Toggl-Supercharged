@@ -6,8 +6,9 @@ const initCockpitProductivityPage = () => {
 
     const monthlyLabels = pageData.monthlyLabels ?? [];
     const monthlyHours = pageData.monthlyHours ?? [];
-    const yearlyLabels = pageData.yearlyLabels ?? [];
-    const yearlyHours = pageData.yearlyHours ?? [];
+    let yearlyLabels = pageData.yearlyLabels ?? [];
+    let yearlyHours = pageData.yearlyHours ?? [];
+    let yearlyScope = pageData.yearlyScope ?? 'recent';
     const welcomeModalDayKey = pageData.welcomeModalDayKey ?? null;
 
     const welcomeModal = document.getElementById('welcomeModal');
@@ -200,8 +201,31 @@ const initCockpitProductivityPage = () => {
 
     const monthlyChartCanvas = document.getElementById('monthlyChart');
     const yearlyChartCanvas = document.getElementById('yearlyChart');
+    const yearlyScopeLabel = document.querySelector('[data-yearly-scope-label]');
+    const yearlyScopeInput = document.querySelector('[data-yearly-scope-input]');
+    const yearlyScopeLinks = Array.from(document.querySelectorAll('[data-yearly-scope-link]'));
     let monthlyChart = null;
     let yearlyChart = null;
+    let yearlyScopeRequestPending = false;
+
+    const setYearlyScopeButtonsState = (activeScope) => {
+        yearlyScopeLinks.forEach((link) => {
+            const isActive = link.dataset.yearlyScope === activeScope;
+            link.classList.toggle('pointer-events-none', isActive);
+            tabActiveClasses.forEach((className) => link.classList.toggle(className, isActive));
+            tabInactiveClasses.forEach((className) => link.classList.toggle(className, !isActive));
+        });
+        if (yearlyScopeInput) {
+            yearlyScopeInput.value = activeScope;
+        }
+    };
+
+    const setYearlyScopeLoading = (isLoading) => {
+        yearlyScopeLinks.forEach((link) => {
+            link.classList.toggle('opacity-60', isLoading);
+            link.classList.toggle('cursor-progress', isLoading);
+        });
+    };
 
     const renderCharts = () => {
         if (typeof window.Chart !== 'function') {
@@ -296,6 +320,81 @@ const initCockpitProductivityPage = () => {
             renderCharts();
             window.clearInterval(intervalId);
         }, { once: true });
+    }
+
+    if (yearlyScopeLinks.length > 0) {
+        setYearlyScopeButtonsState(yearlyScope);
+        yearlyScopeLinks.forEach((link) => {
+            link.addEventListener('click', async (event) => {
+                event.preventDefault();
+                if (yearlyScopeRequestPending) {
+                    return;
+                }
+
+                const requestedScope = link.dataset.yearlyScope ?? '';
+                if (requestedScope === '' || requestedScope === yearlyScope) {
+                    return;
+                }
+
+                yearlyScopeRequestPending = true;
+                setYearlyScopeLoading(true);
+
+                try {
+                    const requestUrl = new URL(link.href, window.location.origin);
+                    requestUrl.searchParams.set('ajax', 'yearly_evolution');
+                    const response = await window.fetch(requestUrl.toString(), {
+                        headers: {
+                            Accept: 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const payload = await response.json();
+                    if (!Array.isArray(payload.labels) || !Array.isArray(payload.hours)) {
+                        throw new Error('Invalid yearly payload');
+                    }
+
+                    yearlyLabels = payload.labels;
+                    yearlyHours = payload.hours;
+                    yearlyScope = typeof payload.scope === 'string' ? payload.scope : requestedScope;
+
+                    if (yearlyChart !== null) {
+                        yearlyChart.data.labels = yearlyLabels;
+                        yearlyChart.data.datasets[0].data = yearlyHours;
+                        yearlyChart.update();
+                    } else {
+                        renderCharts();
+                    }
+
+                    if (yearlyScopeLabel && typeof payload.scopeLabel === 'string') {
+                        yearlyScopeLabel.textContent = `Comparatif multi-années (heures totales) · ${payload.scopeLabel}.`;
+                    }
+
+                    yearlyScopeLinks.forEach((scopeLink) => {
+                        if (scopeLink.dataset.yearlyScope === 'recent' && typeof payload.scopeRecentUrl === 'string') {
+                            scopeLink.href = payload.scopeRecentUrl;
+                        }
+                        if (scopeLink.dataset.yearlyScope === 'all' && typeof payload.scopeAllUrl === 'string') {
+                            scopeLink.href = payload.scopeAllUrl;
+                        }
+                    });
+
+                    setYearlyScopeButtonsState(yearlyScope);
+                    const browserUrl = new URL(window.location.href);
+                    browserUrl.searchParams.set('yearly_scope', yearlyScope);
+                    browserUrl.searchParams.delete('ajax');
+                    window.history.replaceState({}, '', browserUrl.toString());
+                } catch (error) {
+                    window.location.assign(link.href);
+                } finally {
+                    yearlyScopeRequestPending = false;
+                    setYearlyScopeLoading(false);
+                }
+            });
+        });
     }
 };
 

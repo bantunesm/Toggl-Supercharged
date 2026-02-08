@@ -8,15 +8,26 @@ use App\Http\Controllers\Controller;
 use App\Services\TogglService;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductivityDashboardController extends Controller
 {
-    public function __invoke(Request $request, TogglService $togglService): View
+    public function __invoke(Request $request, TogglService $togglService): View|JsonResponse
     {
         $today = CarbonImmutable::today(config('app.timezone'));
         $currentYear = (int) $today->year;
-        $minYear = $currentYear - 9;
+        $allTimeRecords = $togglService->getAllTimeRecords();
+        $trackingSince = $allTimeRecords['tracking_since'];
+        $firstTrackedYear = $trackingSince !== null
+            ? (int) CarbonImmutable::parse((string) $trackingSince, config('app.timezone'))->year
+            : ($currentYear - 9);
+        $minYear = min($currentYear, max(1970, $firstTrackedYear));
+        $yearlyScope = strtolower((string) $request->query('yearly_scope', 'recent'));
+        if (!in_array($yearlyScope, ['recent', 'all'], true)) {
+            $yearlyScope = 'recent';
+        }
+        $yearlyRecentYears = 3;
         $hasYearParam = $request->has('year');
         $hasMonthParam = $request->has('month');
         $selectedYear = max($minYear, min($currentYear, (int) $request->integer('year', $currentYear)));
@@ -28,16 +39,54 @@ class ProductivityDashboardController extends Controller
             $selectedMonth = (int) $today->month;
         }
 
+        $selectedMonthForUrl = $selectedMonth ?? '';
+        $yearlyFromYear = $yearlyScope === 'all'
+            ? $minYear
+            : max($minYear, $selectedYear - ($yearlyRecentYears - 1));
+        $yearlyEvolution = $togglService->getYearlyEvolution(
+            $yearlyFromYear,
+            $selectedYear,
+            $today
+        );
+        $yearlyHours = array_map(fn (int $seconds): float => round($seconds / 3600, 2), $yearlyEvolution['seconds']);
+        $yearlyScopeRecentUrl = route('cockpit.productivity', [
+            'year' => $selectedYear,
+            'month' => $selectedMonthForUrl,
+            'yearly_scope' => 'recent',
+        ]);
+        $yearlyScopeAllTimeUrl = route('cockpit.productivity', [
+            'year' => $selectedYear,
+            'month' => $selectedMonthForUrl,
+            'yearly_scope' => 'all',
+        ]);
+        $yearlyScopeLabel = $yearlyScope === 'all'
+            ? 'All time'
+            : sprintf('%d dernières années', $yearlyRecentYears);
+
+        if ($this->isYearlyEvolutionAjaxRequest($request)) {
+            return response()->json([
+                'scope' => $yearlyScope,
+                'scopeLabel' => $yearlyScopeLabel,
+                'scopeRecentUrl' => $yearlyScopeRecentUrl,
+                'scopeAllUrl' => $yearlyScopeAllTimeUrl,
+                'recentYears' => $yearlyRecentYears,
+                'labels' => $yearlyEvolution['labels'],
+                'hours' => $yearlyHours,
+            ]);
+        }
+
         $isYearlyView = $selectedMonth === null;
         $isCurrentMonthSelected = $selectedYear === $currentYear && $selectedMonth === (int) $today->month;
 
         $switchToCurrentMonthUrl = route('cockpit.productivity', [
             'year' => $currentYear,
             'month' => (int) $today->month,
+            'yearly_scope' => $yearlyScope,
         ]);
         $switchToYearlyUrl = route('cockpit.productivity', [
             'year' => $selectedYear,
             'month' => '',
+            'yearly_scope' => $yearlyScope,
         ]);
 
         $previousPeriodUrl = null;
@@ -48,13 +97,21 @@ class ProductivityDashboardController extends Controller
         if ($isYearlyView) {
             if ($selectedYear > $minYear) {
                 $previousYear = $selectedYear - 1;
-                $previousPeriodUrl = route('cockpit.productivity', ['year' => $previousYear, 'month' => '']);
+                $previousPeriodUrl = route('cockpit.productivity', [
+                    'year' => $previousYear,
+                    'month' => '',
+                    'yearly_scope' => $yearlyScope,
+                ]);
                 $previousPeriodLabel = (string) $previousYear;
             }
 
             if ($selectedYear < $currentYear) {
                 $nextYear = $selectedYear + 1;
-                $nextPeriodUrl = route('cockpit.productivity', ['year' => $nextYear, 'month' => '']);
+                $nextPeriodUrl = route('cockpit.productivity', [
+                    'year' => $nextYear,
+                    'month' => '',
+                    'yearly_scope' => $yearlyScope,
+                ]);
                 $nextPeriodLabel = (string) $nextYear;
             }
         } else {
@@ -76,6 +133,7 @@ class ProductivityDashboardController extends Controller
                 $previousPeriodUrl = route('cockpit.productivity', [
                     'year' => (int) $previousMonthDate->year,
                     'month' => (int) $previousMonthDate->month,
+                    'yearly_scope' => $yearlyScope,
                 ]);
                 $previousPeriodLabel = ucfirst($previousMonthDate->locale('fr')->isoFormat('MMMM YYYY'));
             }
@@ -84,6 +142,7 @@ class ProductivityDashboardController extends Controller
                 $nextPeriodUrl = route('cockpit.productivity', [
                     'year' => (int) $nextMonthDate->year,
                     'month' => (int) $nextMonthDate->month,
+                    'yearly_scope' => $yearlyScope,
                 ]);
                 $nextPeriodLabel = ucfirst($nextMonthDate->locale('fr')->isoFormat('MMMM YYYY'));
             }
@@ -92,7 +151,6 @@ class ProductivityDashboardController extends Controller
         [$periodStart, $periodEnd, $periodLabel] = $this->resolvePeriod($selectedYear, $selectedMonth, $today);
         $periodMetrics = $togglService->getPeriodMetrics($periodStart, $periodEnd);
         $periodBreakdown = $togglService->getPeriodClientProjectBreakdown($periodStart, $periodEnd);
-        $allTimeRecords = $togglService->getAllTimeRecords();
 
         $daysInPeriod = (int) $periodMetrics['days_in_period'];
         if ($isYearlyView) {
@@ -120,15 +178,8 @@ class ProductivityDashboardController extends Controller
         );
 
         $monthlyEvolution = $togglService->getMonthlyEvolution($selectedYear, $today);
-        $historyYears = max(3, (int) config('toggl.history_years', 5));
-        $yearlyEvolution = $togglService->getYearlyEvolution(
-            $selectedYear - ($historyYears - 1),
-            $selectedYear,
-            $today
-        );
 
         $monthlyHours = array_map(fn (int $seconds): float => round($seconds / 3600, 2), $monthlyEvolution['seconds']);
-        $yearlyHours = array_map(fn (int $seconds): float => round($seconds / 3600, 2), $yearlyEvolution['seconds']);
         $progressPercent = $periodMetrics['progress_ratio'] * 100;
         $kpiDaysInPeriod = $daysInPeriod;
         $kpiDailyAverageSeconds = (float) $periodMetrics['daily_average_seconds'];
@@ -212,7 +263,6 @@ class ProductivityDashboardController extends Controller
             ? number_format(($currentScopeSeconds / $currentScopeRecordSeconds) * 100, 1)
             : null;
 
-        $trackingSince = $allTimeRecords['tracking_since'];
         $trackingSinceLabel = $trackingSince !== null
             ? $this->formatDateForDisplay((string) $trackingSince)
             : null;
@@ -476,6 +526,11 @@ class ProductivityDashboardController extends Controller
             'yearlyChartLabels' => $yearlyEvolution['labels'],
             'yearlyChartHours' => $yearlyHours,
             'monthRows' => $monthRows,
+            'yearlyScope' => $yearlyScope,
+            'yearlyScopeLabel' => $yearlyScopeLabel,
+            'yearlyScopeRecentUrl' => $yearlyScopeRecentUrl,
+            'yearlyScopeAllTimeUrl' => $yearlyScopeAllTimeUrl,
+            'yearlyRecentYears' => $yearlyRecentYears,
             'periodBreakdownClients' => $periodBreakdown['clients'],
             'periodBreakdownProjects' => $periodBreakdown['projects'],
             'periodBreakdownTotalHours' => $this->formatHours((int) $periodBreakdown['total_seconds']),
@@ -558,6 +613,11 @@ class ProductivityDashboardController extends Controller
     private function formatHours(int|float $seconds): string
     {
         return number_format($seconds / 3600, 2);
+    }
+
+    private function isYearlyEvolutionAjaxRequest(Request $request): bool
+    {
+        return strtolower((string) $request->query('ajax', '')) === 'yearly_evolution';
     }
 
     private function formatSignedHours(int|float $seconds): string

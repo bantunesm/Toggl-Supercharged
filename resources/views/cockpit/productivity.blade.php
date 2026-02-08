@@ -62,6 +62,7 @@
                 </header>
 
                 <form method="GET" action="{{ route('cockpit.productivity') }}" class="grid w-full gap-3 sm:grid-cols-12 sm:items-end lg:w-auto">
+                    <input type="hidden" name="yearly_scope" value="{{ $yearlyScope }}" data-yearly-scope-input>
                     <label class="flex flex-col gap-1 text-sm text-slate-600 sm:col-span-4">
                         <span>Année</span>
                         <select name="year" class="h-10 rounded-lg border-slate-300 bg-white text-slate-900">
@@ -330,7 +331,7 @@
             </div>
         </section>
 
-        <section class="mt-6 grid gap-4 xl:grid-cols-2">
+        <section class="mt-6 grid gap-4 xl:grid-cols-[minmax(0,_0.85fr)_minmax(0,_1.15fr)] 2xl:grid-cols-[minmax(0,_0.8fr)_minmax(0,_1.2fr)]">
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
                 <h2 class="text-lg font-semibold text-slate-900">Comparatif vs période précédente</h2>
                 <p class="mt-1 text-sm text-slate-500">{{ $comparisonLabel }}</p>
@@ -367,23 +368,23 @@
                 </p>
 
                 <div class="mt-4 overflow-x-auto pb-2">
-                    <div class="inline-flex min-w-max items-start gap-2">
-                        <div class="mt-5 grid grid-rows-7 gap-1 pr-1 text-[10px] text-slate-500">
-                            <div class="h-3 leading-3">Lun</div>
-                            <div class="h-3 leading-3"></div>
-                            <div class="h-3 leading-3">Mer</div>
-                            <div class="h-3 leading-3"></div>
-                            <div class="h-3 leading-3">Ven</div>
-                            <div class="h-3 leading-3"></div>
-                            <div class="h-3 leading-3"></div>
+                    <div class="inline-flex min-w-max items-start gap-1.5">
+                        <div class="mt-4 grid grid-rows-7 gap-0.5 pr-1 text-[10px] text-slate-500">
+                            <div class="h-[10px] leading-[10px]">Lun</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]">Mer</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]">Ven</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]"></div>
                         </div>
 
                         <div>
-                            <div class="mb-1 flex gap-1">
+                            <div class="mb-1 flex gap-0.5">
                                 @foreach ($heatmapWeekLabels as $monthLabel)
-                                    <div class="relative h-3 w-[11px]">
+                                    <div class="relative h-[10px] w-[10px]">
                                         @if ($monthLabel !== '')
-                                            <span class="absolute left-0 top-0 whitespace-nowrap text-[10px] leading-3 text-slate-500">
+                                            <span class="absolute left-0 top-0 whitespace-nowrap text-[10px] leading-[10px] text-slate-500">
                                                 {{ $monthLabel }}
                                             </span>
                                         @endif
@@ -391,9 +392,9 @@
                                 @endforeach
                             </div>
 
-                            <div class="flex gap-1">
+                            <div class="flex gap-0.5">
                                 @foreach ($heatmapWeeks as $week)
-                                    <div class="flex w-[11px] flex-col gap-1">
+                                    <div class="flex w-[10px] flex-col gap-0.5">
                                         @foreach ($week as $cell)
                                             @if (($cell['type'] ?? '') === 'day')
                                                 @php
@@ -404,10 +405,10 @@
                                                 @endphp
                                                 <div
                                                     title="{{ $cellTitle }}"
-                                                    class="h-[11px] w-[11px] rounded-[3px] {{ $cell['color_class'] }} border {{ $isMissingCell ? 'border-slate-300' : 'border-slate-200/70' }}"
+                                                    class="h-[10px] w-[10px] rounded-[3px] {{ $cell['color_class'] }} border {{ $isMissingCell ? 'border-slate-300' : 'border-slate-200/70' }}"
                                                 ></div>
                                             @else
-                                                <div class="h-[11px] w-[11px] rounded-[3px] bg-transparent"></div>
+                                                <div class="h-[10px] w-[10px] rounded-[3px] bg-transparent"></div>
                                             @endif
                                         @endforeach
                                     </div>
@@ -415,9 +416,6 @@
                             </div>
                         </div>
                     </div>
-                </div>
-                <div class="mt-2 text-xs text-slate-500">
-                    Vue horizontale type GitHub: semaines en colonnes, jours en lignes.
                 </div>
 
                 <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -658,8 +656,30 @@
             </article>
 
             <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-                <h2 class="text-lg font-semibold text-slate-900">Evolution annuelle</h2>
-                <p class="mt-1 text-sm text-slate-500">Comparatif multi-années (heures totales).</p>
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between" data-yearly-scope-switch>
+                    <div>
+                        <h2 class="text-lg font-semibold text-slate-900">Evolution annuelle</h2>
+                        <p class="mt-1 text-sm text-slate-500" data-yearly-scope-label>Comparatif multi-années (heures totales)</p>
+                    </div>
+                    <div class="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-1">
+                        <a
+                            href="{{ $yearlyScopeRecentUrl }}"
+                            data-yearly-scope-link
+                            data-yearly-scope="recent"
+                            class="rounded-md border px-3 py-1.5 text-xs font-medium transition {{ $yearlyScope === 'recent' ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
+                        >
+                            {{ $yearlyRecentYears }} ans
+                        </a>
+                        <a
+                            href="{{ $yearlyScopeAllTimeUrl }}"
+                            data-yearly-scope-link
+                            data-yearly-scope="all"
+                            class="rounded-md border px-3 py-1.5 text-xs font-medium transition {{ $yearlyScope === 'all' ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
+                        >
+                            All time
+                        </a>
+                    </div>
+                </div>
                 <div class="mt-4 h-72">
                     <canvas id="yearlyChart"></canvas>
                 </div>
@@ -709,6 +729,7 @@
             'monthlyHours' => $monthlyChartHours,
             'yearlyLabels' => $yearlyChartLabels,
             'yearlyHours' => $yearlyChartHours,
+            'yearlyScope' => $yearlyScope,
             'welcomeModalDayKey' => \Carbon\CarbonImmutable::today(config('app.timezone'))->toDateString(),
         ];
     @endphp

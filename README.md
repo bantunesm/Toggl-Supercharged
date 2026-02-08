@@ -61,6 +61,24 @@ Commande:
 php artisan toggl:warmup
 ```
 
+Import CSV TimeFlip (journalier):
+
+```bash
+php artisan timeflip:import /chemin/vers/timeflip_export.csv --dry-run
+php artisan timeflip:import /chemin/vers/timeflip_export.csv --conflict=replace
+php artisan timeflip:import /chemin/vers/timeflip_export.csv --conflict=merge
+```
+
+- `--conflict=skip` (defaut): conserve les snapshots journaliers existants.
+- `--conflict=replace`: remplace les snapshots journaliers existants sur la plage importee.
+- `--conflict=merge`: ajoute TimeFlip aux jours existants (idempotent pour TimeFlip grace a `manual_imports.timeflip_csv.seconds` par jour).
+
+Matching client (V2):
+
+- Configurable dans `config/toggl.php` (`client_matching`).
+- Utilise des regles `project_exact`, `project_contains`, `project_regex`.
+- Par defaut, les regles s'appliquent seulement quand Toggl retourne un client vide (`Sans client`).
+
 Scheduler Laravel:
 
 ```bash
@@ -81,4 +99,3 @@ Les tests feature mockent `TogglService` pour eviter la dependance reseau.
 - `app/Services/TogglService.php`
 - `resources/views/cockpit/productivity.blade.php`
 - `resources/views/cockpit/partials/*`
-

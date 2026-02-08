@@ -16,6 +16,66 @@ class TogglService
 {
     /**
      * @return array{
+     *   workspace_id: int,
+     *   history_years: int,
+     *   daily_days: int,
+     *   years_synced: int,
+     *   months_synced: int,
+     *   days_synced: int,
+     *   quota_limited: bool,
+     *   new_daily_days: int,
+     *   new_daily_days_first: ?string,
+     *   new_daily_days_last: ?string,
+     *   new_daily_days_by_year: array<int, int>,
+     *   daily_totals_by_year: array<int, int>
+     * }
+     */
+    public function warmupDashboardSnapshotsWithRecap(
+        ?CarbonImmutable $today = null,
+        ?int $historyYears = null,
+        ?int $dailyDays = null
+    ): array {
+        $today = $today ?? CarbonImmutable::today(config('app.timezone'));
+        $historyYears = max(1, $historyYears ?? (int) config('toggl.history_years', 5));
+        $dailyDays = max(0, $dailyDays ?? (int) config('toggl.warmup_daily_days', 120));
+        $workspaceId = $this->workspaceId();
+        $fromYear = (int) $today->year - ($historyYears - 1);
+        $yearWindowStart = CarbonImmutable::create($fromYear, 1, 1, 0, 0, 0, config('app.timezone'))->startOfDay();
+        $dailyWindowStart = $dailyDays > 0 ? $today->subDays($dailyDays - 1)->startOfDay() : $today->startOfDay();
+        $syncWindowStart = $yearWindowStart->lt($dailyWindowStart) ? $yearWindowStart : $dailyWindowStart;
+
+        $dailyBefore = $this->fetchDailySnapshotDates($workspaceId, $syncWindowStart, $today);
+        $result = $this->warmupDashboardSnapshots($today, $historyYears, $dailyDays);
+        $dailyAfter = $this->fetchDailySnapshotDates($workspaceId, $syncWindowStart, $today);
+
+        $newDailyDays = array_values(array_diff($dailyAfter, $dailyBefore));
+        sort($newDailyDays);
+
+        $newDailyByYear = [];
+        foreach ($newDailyDays as $date) {
+            $year = (int) substr($date, 0, 4);
+            $newDailyByYear[$year] = ($newDailyByYear[$year] ?? 0) + 1;
+        }
+        ksort($newDailyByYear);
+
+        return [
+            'workspace_id' => $workspaceId,
+            'history_years' => $historyYears,
+            'daily_days' => $dailyDays,
+            'years_synced' => (int) $result['years_synced'],
+            'months_synced' => (int) $result['months_synced'],
+            'days_synced' => (int) $result['days_synced'],
+            'quota_limited' => (bool) ($result['quota_limited'] ?? false),
+            'new_daily_days' => count($newDailyDays),
+            'new_daily_days_first' => $newDailyDays[0] ?? null,
+            'new_daily_days_last' => $newDailyDays === [] ? null : $newDailyDays[count($newDailyDays) - 1],
+            'new_daily_days_by_year' => $newDailyByYear,
+            'daily_totals_by_year' => $this->fetchDailyTotalsByYear($workspaceId),
+        ];
+    }
+
+    /**
+     * @return array{
      *   tracking_since: ?string,
      *   day: ?array{seconds: int, date: string},
      *   month: ?array{seconds: int, start_date: string, end_date: string},
@@ -25,7 +85,7 @@ class TogglService
     public function getAllTimeRecords(): array
     {
         $workspaceId = $this->workspaceId();
-        $cacheKey = sprintf('toggl.records.all_time.v1.%d', $workspaceId);
+        $cacheKey = sprintf('toggl.records.all_time.v5.%d', $workspaceId);
 
         return Cache::remember(
             $cacheKey,
@@ -33,6 +93,7 @@ class TogglService
             function () use ($workspaceId): array {
                 $trackingSince = TogglSyncSnapshot::query()
                     ->where('workspace_id', $workspaceId)
+                    ->where('total_tracked_seconds', '>', 0)
                     ->orderBy('window_start_date')
                     ->value('window_start_date');
 
@@ -46,6 +107,7 @@ class TogglService
                 $dayRecord = null;
                 $monthRecord = null;
                 $yearRecord = null;
+                $manualTimeflipTotals = $this->fetchManualTimeflipTotalsByMonthAndYear($workspaceId);
 
                 foreach ($snapshots as $snapshot) {
                     if ($this->isFallbackSnapshot($snapshot)) {
@@ -60,31 +122,42 @@ class TogglService
                         continue;
                     }
 
-                    if ($dayRecord === null && $start->isSameDay($end)) {
+                    if ($start->isSameDay($end) && ($dayRecord === null || $seconds > (int) $dayRecord['seconds'])) {
                         $dayRecord = [
                             'seconds' => $seconds,
                             'date' => $start->toDateString(),
                         ];
                     }
 
-                    if ($monthRecord === null && $this->isCompleteMonthSnapshot($start, $end)) {
-                        $monthRecord = [
-                            'seconds' => $seconds,
-                            'start_date' => $start->toDateString(),
-                            'end_date' => $end->toDateString(),
-                        ];
+                    if ($this->isCompleteMonthSnapshot($start, $end)) {
+                        $monthSeconds = $seconds;
+                        if (!$this->isDailyRollupSnapshot($snapshot)) {
+                            $monthKey = $start->format('Y-m');
+                            $monthSeconds += (int) ($manualTimeflipTotals['month'][$monthKey] ?? 0);
+                        }
+
+                        if ($monthRecord === null || $monthSeconds > (int) $monthRecord['seconds']) {
+                            $monthRecord = [
+                                'seconds' => $monthSeconds,
+                                'start_date' => $start->toDateString(),
+                                'end_date' => $end->toDateString(),
+                            ];
+                        }
                     }
 
-                    if ($yearRecord === null && $this->isCompleteYearSnapshot($start, $end)) {
-                        $yearRecord = [
-                            'seconds' => $seconds,
-                            'start_date' => $start->toDateString(),
-                            'end_date' => $end->toDateString(),
-                        ];
-                    }
+                    if ($this->isCompleteYearSnapshot($start, $end)) {
+                        $yearSeconds = $seconds;
+                        if (!$this->isDailyRollupSnapshot($snapshot)) {
+                            $yearSeconds += (int) ($manualTimeflipTotals['year'][(int) $start->year] ?? 0);
+                        }
 
-                    if ($dayRecord !== null && $monthRecord !== null && $yearRecord !== null) {
-                        break;
+                        if ($yearRecord === null || $yearSeconds > (int) $yearRecord['seconds']) {
+                            $yearRecord = [
+                                'seconds' => $yearSeconds,
+                                'start_date' => $start->toDateString(),
+                                'end_date' => $end->toDateString(),
+                            ];
+                        }
                     }
                 }
 
@@ -122,7 +195,7 @@ class TogglService
         $dailyGoalHours = max(0.0, $dailyGoalHours ?? (float) config('toggl.daily_goal_hours', 8.0));
         $workspaceId = $this->workspaceId();
         $cacheKey = sprintf(
-            'toggl.period.metrics.v2.%d.%s.%s.%s',
+            'toggl.period.metrics.v4.%d.%s.%s.%s',
             $workspaceId,
             $periodStart->toDateString(),
             $periodEnd->toDateString(),
@@ -135,7 +208,12 @@ class TogglService
             function () use ($workspaceId, $periodStart, $periodEnd, $dailyGoalHours): array {
                 $snapshot = $this->syncPeriodSnapshot($workspaceId, $periodStart, $periodEnd);
                 $daysInPeriod = $periodStart->diffInDays($periodEnd) + 1;
-                $totalSeconds = max(0, (int) $snapshot->total_tracked_seconds);
+                $totalSeconds = $this->resolveSnapshotTotalSeconds(
+                    $workspaceId,
+                    $periodStart,
+                    $periodEnd,
+                    $snapshot
+                );
                 $dailyAverageSeconds = $totalSeconds / max(1, $daysInPeriod);
                 $targetSeconds = $dailyGoalHours * 3600 * $daysInPeriod;
                 $progressRatio = $targetSeconds > 0 ? $totalSeconds / $targetSeconds : 0.0;
@@ -176,7 +254,7 @@ class TogglService
 
         $workspaceId = $this->workspaceId();
         $cacheKey = sprintf(
-            'toggl.period.breakdown.v1.%d.%s.%s',
+            'toggl.period.breakdown.v2.%d.%s.%s',
             $workspaceId,
             $periodStart->toDateString(),
             $periodEnd->toDateString()
@@ -208,7 +286,7 @@ class TogglService
 
                 foreach ($rawProjectRows as $row) {
                     $projectName = $row['project'];
-                    $clientName = $row['client'];
+                    $clientName = $this->resolveClientByMatchingRules($projectName, $row['client']);
                     $seconds = max(0, (int) $row['seconds']);
                     if ($seconds <= 0) {
                         continue;
@@ -311,7 +389,7 @@ class TogglService
     {
         $today = $today ?? CarbonImmutable::today(config('app.timezone'));
         $workspaceId = $this->workspaceId();
-        $cacheKey = sprintf('toggl.monthly.evolution.v2.%d.%d', $workspaceId, $year);
+        $cacheKey = sprintf('toggl.monthly.evolution.v4.%d.%d', $workspaceId, $year);
 
         return Cache::remember(
             $cacheKey,
@@ -335,7 +413,12 @@ class TogglService
 
                     $effectiveEnd = $monthEnd->gt($today) ? $today : $monthEnd;
                     $snapshot = $this->syncPeriodSnapshot($workspaceId, $monthStart, $effectiveEnd);
-                    $seconds[] = max(0, (int) $snapshot->total_tracked_seconds);
+                    $seconds[] = $this->resolveSnapshotTotalSeconds(
+                        $workspaceId,
+                        $monthStart,
+                        $effectiveEnd,
+                        $snapshot
+                    );
                     if ($this->isFallbackSnapshot($snapshot)) {
                         $fallbackCount++;
                     }
@@ -377,7 +460,7 @@ class TogglService
 
         $today = $today ?? CarbonImmutable::today(config('app.timezone'));
         $workspaceId = $this->workspaceId();
-        $cacheKey = sprintf('toggl.yearly.evolution.v2.%d.%d.%d', $workspaceId, $fromYear, $toYear);
+        $cacheKey = sprintf('toggl.yearly.evolution.v4.%d.%d.%d', $workspaceId, $fromYear, $toYear);
 
         return Cache::remember(
             $cacheKey,
@@ -401,7 +484,12 @@ class TogglService
 
                     $effectiveEnd = $yearEnd->gt($today) ? $today : $yearEnd;
                     $snapshot = $this->syncPeriodSnapshot($workspaceId, $yearStart, $effectiveEnd);
-                    $seconds[] = max(0, (int) $snapshot->total_tracked_seconds);
+                    $seconds[] = $this->resolveSnapshotTotalSeconds(
+                        $workspaceId,
+                        $yearStart,
+                        $effectiveEnd,
+                        $snapshot
+                    );
                     if ($this->isFallbackSnapshot($snapshot)) {
                         $fallbackCount++;
                     }
@@ -621,7 +709,13 @@ class TogglService
         $isClosedPeriod = $periodEnd->lt(CarbonImmutable::today(config('app.timezone')));
         if ($snapshot !== null) {
             $isFallbackSnapshot = $this->isFallbackSnapshot($snapshot);
-            if (!$isFallbackSnapshot && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))) {
+            $isDailyRollupSnapshot = $this->isDailyRollupSnapshot($snapshot);
+
+            if (
+                !$isFallbackSnapshot
+                && !$isDailyRollupSnapshot
+                && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))
+            ) {
                 return $snapshot;
             }
         }
@@ -634,6 +728,13 @@ class TogglService
 
             if ($snapshot !== null && !$this->isFallbackSnapshot($snapshot)) {
                 return $snapshot;
+            }
+
+            if ($isClosedPeriod) {
+                $dailyRollupSnapshot = $this->buildSnapshotFromDailyRollup($workspaceId, $periodStart, $periodEnd);
+                if ($dailyRollupSnapshot !== null) {
+                    return $dailyRollupSnapshot;
+                }
             }
 
             return $this->buildFallbackSnapshot($workspaceId, $periodStart, $periodEnd, $throwable);
@@ -673,6 +774,57 @@ class TogglService
             ->all();
 
         return $snapshots;
+    }
+
+    private function buildSnapshotFromDailyRollup(
+        int $workspaceId,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd
+    ): ?TogglSyncSnapshot {
+        $dailySnapshots = $this->fetchExistingDailySnapshots($workspaceId, $periodStart, $periodEnd);
+        $expectedDates = $this->buildDateRange($periodStart, $periodEnd);
+        $expectedDays = count($expectedDates);
+        if (count($dailySnapshots) !== $expectedDays) {
+            return null;
+        }
+
+        $secondsByDate = [];
+        foreach ($dailySnapshots as $dailySnapshot) {
+            $date = $dailySnapshot->window_start_date->toDateString();
+            $secondsByDate[$date] = max(0, (int) $dailySnapshot->total_tracked_seconds);
+        }
+        if (count($secondsByDate) !== $expectedDays) {
+            return null;
+        }
+
+        $totalTrackedSeconds = 0;
+        foreach ($expectedDates as $date) {
+            if (!array_key_exists($date, $secondsByDate)) {
+                return null;
+            }
+
+            $totalTrackedSeconds += (int) $secondsByDate[$date];
+        }
+
+        /** @var TogglSyncSnapshot $rollupSnapshot */
+        $rollupSnapshot = TogglSyncSnapshot::query()->updateOrCreate(
+            [
+                'workspace_id' => $workspaceId,
+                'window_start_date' => $periodStart->toDateString(),
+                'window_end_date' => $periodEnd->toDateString(),
+            ],
+            [
+                'total_tracked_seconds' => $totalTrackedSeconds,
+                'raw_payload' => [
+                    'source' => 'daily_rollup',
+                    'derived_from_daily' => true,
+                    'daily_snapshot_count' => $expectedDays,
+                ],
+                'synced_at' => now(),
+            ]
+        );
+
+        return $rollupSnapshot;
     }
 
     private function isTodaySnapshotFresh(int $workspaceId, CarbonImmutable $today): bool
@@ -732,10 +884,54 @@ class TogglService
             && ($snapshot->raw_payload['error'] ?? null) === 'snapshot_fallback';
     }
 
+    private function isDailyRollupSnapshot(TogglSyncSnapshot $snapshot): bool
+    {
+        return is_array($snapshot->raw_payload)
+            && ($snapshot->raw_payload['source'] ?? null) === 'daily_rollup';
+    }
+
     private function isQuotaLimitedSnapshot(TogglSyncSnapshot $snapshot): bool
     {
         return is_array($snapshot->raw_payload)
             && (bool) ($snapshot->raw_payload['quota_limited'] ?? false) === true;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function fetchDailySnapshotDates(
+        int $workspaceId,
+        CarbonImmutable $startDate,
+        CarbonImmutable $endDate
+    ): array {
+        /** @var array<int, string> $dates */
+        $dates = TogglSyncSnapshot::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereColumn('window_start_date', 'window_end_date')
+            ->whereBetween('window_start_date', [$startDate->toDateString(), $endDate->toDateString()])
+            ->pluck('window_start_date')
+            ->map(static fn ($date): string => CarbonImmutable::parse((string) $date)->toDateString())
+            ->all();
+
+        return $dates;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function fetchDailyTotalsByYear(int $workspaceId): array
+    {
+        return TogglSyncSnapshot::query()
+            ->selectRaw('YEAR(window_start_date) as year, COUNT(DISTINCT window_start_date) as synced_days')
+            ->where('workspace_id', $workspaceId)
+            ->whereColumn('window_start_date', 'window_end_date')
+            ->groupByRaw('YEAR(window_start_date)')
+            ->orderByRaw('YEAR(window_start_date)')
+            ->get()
+            ->mapWithKeys(
+                static fn ($row): array => [(int) $row->year => (int) $row->synced_days]
+            )
+            ->all();
     }
 
     private function isCompleteMonthSnapshot(CarbonImmutable $start, CarbonImmutable $end): bool
@@ -1043,6 +1239,227 @@ class TogglService
         }
 
         return null;
+    }
+
+    private function resolveClientByMatchingRules(string $projectName, string $currentClientName): string
+    {
+        $matchingConfig = config('toggl.client_matching');
+        if (!is_array($matchingConfig) || !((bool) ($matchingConfig['enabled'] ?? false))) {
+            return $currentClientName;
+        }
+
+        $applyWhenMissingOnly = (bool) ($matchingConfig['apply_when_missing_client_only'] ?? true);
+        if ($applyWhenMissingOnly && !$this->isMissingClientLabel($currentClientName, $matchingConfig)) {
+            return $currentClientName;
+        }
+
+        $rules = $matchingConfig['rules'] ?? [];
+        if (!is_array($rules)) {
+            return $currentClientName;
+        }
+
+        foreach ($rules as $rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
+
+            $targetClient = trim((string) ($rule['client'] ?? ''));
+            if ($targetClient === '') {
+                continue;
+            }
+
+            if ($this->projectMatchesClientRule($projectName, $rule)) {
+                return $targetClient;
+            }
+        }
+
+        return $currentClientName;
+    }
+
+    /**
+     * @param array<string, mixed> $matchingConfig
+     */
+    private function isMissingClientLabel(string $clientName, array $matchingConfig): bool
+    {
+        $normalizedClientName = $this->normalizeForMatching($clientName);
+        $missingLabels = $matchingConfig['missing_client_labels'] ?? [];
+        if (!is_array($missingLabels)) {
+            return $normalizedClientName === '';
+        }
+
+        $normalizedMissingLabels = [];
+        foreach ($missingLabels as $label) {
+            if (!is_scalar($label)) {
+                continue;
+            }
+
+            $normalizedMissingLabels[] = $this->normalizeForMatching((string) $label);
+        }
+
+        if ($normalizedMissingLabels === []) {
+            return $normalizedClientName === '';
+        }
+
+        return in_array($normalizedClientName, $normalizedMissingLabels, true);
+    }
+
+    /**
+     * @param array<string, mixed> $rule
+     */
+    private function projectMatchesClientRule(string $projectName, array $rule): bool
+    {
+        $normalizedProjectName = $this->normalizeForMatching($projectName);
+        if ($normalizedProjectName === '') {
+            return false;
+        }
+
+        $exactMatches = $rule['project_exact'] ?? [];
+        if (is_array($exactMatches)) {
+            foreach ($exactMatches as $exactMatch) {
+                if (!is_scalar($exactMatch)) {
+                    continue;
+                }
+
+                if ($normalizedProjectName === $this->normalizeForMatching((string) $exactMatch)) {
+                    return true;
+                }
+            }
+        }
+
+        $containsMatches = $rule['project_contains'] ?? [];
+        if (is_array($containsMatches)) {
+            foreach ($containsMatches as $containsMatch) {
+                if (!is_scalar($containsMatch)) {
+                    continue;
+                }
+
+                $normalizedNeedle = $this->normalizeForMatching((string) $containsMatch);
+                if ($normalizedNeedle === '') {
+                    continue;
+                }
+
+                if (mb_strpos($normalizedProjectName, $normalizedNeedle) !== false) {
+                    return true;
+                }
+            }
+        }
+
+        $regexMatches = $rule['project_regex'] ?? [];
+        if (is_array($regexMatches)) {
+            foreach ($regexMatches as $regexMatch) {
+                if (!is_string($regexMatch) || $regexMatch === '') {
+                    continue;
+                }
+
+                if ($this->safeRegexMatch($regexMatch, $projectName)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizeForMatching(string $value): string
+    {
+        return mb_strtolower(trim($value));
+    }
+
+    private function resolveSnapshotTotalSeconds(
+        int $workspaceId,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd,
+        TogglSyncSnapshot $snapshot
+    ): int {
+        $baseSeconds = max(0, (int) $snapshot->total_tracked_seconds);
+        if ($periodStart->isSameDay($periodEnd) || $this->isDailyRollupSnapshot($snapshot)) {
+            return $baseSeconds;
+        }
+
+        $manualSeconds = $this->sumManualImportedSeconds($workspaceId, $periodStart, $periodEnd);
+
+        return $baseSeconds + $manualSeconds;
+    }
+
+    private function sumManualImportedSeconds(
+        int $workspaceId,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd
+    ): int {
+        $manualSeconds = 0;
+        $dailySnapshots = $this->fetchExistingDailySnapshots($workspaceId, $periodStart, $periodEnd);
+        foreach ($dailySnapshots as $snapshot) {
+            if (!is_array($snapshot->raw_payload)) {
+                continue;
+            }
+
+            $rawSeconds = $snapshot->raw_payload['manual_imports']['timeflip_csv']['seconds'] ?? null;
+            if (!is_numeric($rawSeconds)) {
+                continue;
+            }
+
+            $manualSeconds += max(0, (int) $rawSeconds);
+        }
+
+        return $manualSeconds;
+    }
+
+    /**
+     * @return array{
+     *   month: array<string, int>,
+     *   year: array<int, int>
+     * }
+     */
+    private function fetchManualTimeflipTotalsByMonthAndYear(int $workspaceId): array
+    {
+        $monthTotals = [];
+        $yearTotals = [];
+
+        /** @var array<int, TogglSyncSnapshot> $dailySnapshots */
+        $dailySnapshots = TogglSyncSnapshot::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereColumn('window_start_date', 'window_end_date')
+            ->get()
+            ->all();
+
+        foreach ($dailySnapshots as $dailySnapshot) {
+            if (!is_array($dailySnapshot->raw_payload)) {
+                continue;
+            }
+
+            $manualSecondsRaw = $dailySnapshot->raw_payload['manual_imports']['timeflip_csv']['seconds'] ?? null;
+            if (!is_numeric($manualSecondsRaw)) {
+                continue;
+            }
+
+            $manualSeconds = max(0, (int) $manualSecondsRaw);
+            if ($manualSeconds <= 0) {
+                continue;
+            }
+
+            $date = $dailySnapshot->window_start_date->toDateString();
+            $monthKey = substr($date, 0, 7);
+            $yearKey = (int) substr($date, 0, 4);
+            $monthTotals[$monthKey] = ($monthTotals[$monthKey] ?? 0) + $manualSeconds;
+            $yearTotals[$yearKey] = ($yearTotals[$yearKey] ?? 0) + $manualSeconds;
+        }
+
+        return [
+            'month' => $monthTotals,
+            'year' => $yearTotals,
+        ];
+    }
+
+    private function safeRegexMatch(string $pattern, string $subject): bool
+    {
+        set_error_handler(static fn (): bool => true);
+        try {
+            $result = preg_match($pattern, $subject);
+        } finally {
+            restore_error_handler();
+        }
+
+        return $result === 1;
     }
 
     private function isQuotaLimitedThrowable(Throwable $throwable): bool

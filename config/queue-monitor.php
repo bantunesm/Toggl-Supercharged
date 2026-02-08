@@ -35,7 +35,7 @@ return [
         'per_page' => 35,
 
         // Show custom data stored on model
-        'show_custom_data' => false,
+        'show_custom_data' => true,
 
         // Allow the deletion of single monitor items.
         'allow_deletion' => true,
