@@ -536,7 +536,8 @@ class TogglService
      * @return array{
      *   years_synced: int,
      *   months_synced: int,
-     *   days_synced: int
+     *   days_synced: int,
+     *   quota_limited: bool
      * }
      */
     public function warmupDashboardSnapshots(
@@ -552,6 +553,7 @@ class TogglService
         $yearsSynced = 0;
         $monthsSynced = 0;
         $daysSynced = 0;
+        $quotaLimited = false;
         $fromYear = (int) $today->year - ($historyYears - 1);
 
         for ($year = $fromYear; $year <= (int) $today->year; $year++) {
@@ -564,6 +566,7 @@ class TogglService
                     'years_synced' => $yearsSynced,
                     'months_synced' => $monthsSynced,
                     'days_synced' => $daysSynced,
+                    'quota_limited' => true,
                 ];
             }
             $yearsSynced++;
@@ -579,6 +582,7 @@ class TogglService
                         'years_synced' => $yearsSynced,
                         'months_synced' => $monthsSynced,
                         'days_synced' => $daysSynced,
+                        'quota_limited' => true,
                     ];
                 }
                 $monthsSynced++;
@@ -589,6 +593,7 @@ class TogglService
             $day = $today->subDays($offset)->startOfDay();
             $daySnapshot = $this->syncPeriodSnapshot($workspaceId, $day, $day);
             if ($this->isQuotaLimitedSnapshot($daySnapshot)) {
+                $quotaLimited = true;
                 break;
             }
             $daysSynced++;
@@ -598,6 +603,7 @@ class TogglService
             'years_synced' => $yearsSynced,
             'months_synced' => $monthsSynced,
             'days_synced' => $daysSynced,
+            'quota_limited' => $quotaLimited,
         ];
     }
 
@@ -613,8 +619,11 @@ class TogglService
             ->first();
 
         $isClosedPeriod = $periodEnd->lt(CarbonImmutable::today(config('app.timezone')));
-        if ($snapshot !== null && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))) {
-            return $snapshot;
+        if ($snapshot !== null) {
+            $isFallbackSnapshot = $this->isFallbackSnapshot($snapshot);
+            if (!$isFallbackSnapshot && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))) {
+                return $snapshot;
+            }
         }
 
         try {
@@ -623,7 +632,7 @@ class TogglService
         } catch (Throwable $throwable) {
             report($throwable);
 
-            if ($snapshot !== null) {
+            if ($snapshot !== null && !$this->isFallbackSnapshot($snapshot)) {
                 return $snapshot;
             }
 
