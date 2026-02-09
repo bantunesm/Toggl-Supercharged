@@ -538,6 +538,10 @@ class TogglService
         $existingSnapshots = $this->fetchExistingDailySnapshots($workspaceId, $periodStart, $periodEnd);
         $secondsByDate = [];
         foreach ($existingSnapshots as $snapshot) {
+            if ($this->isManualTimeflipZeroPlaceholderSnapshot($snapshot)) {
+                continue;
+            }
+
             $date = $snapshot->window_start_date->toDateString();
             $secondsByDate[$date] = max(0, (int) $snapshot->total_tracked_seconds);
         }
@@ -710,10 +714,12 @@ class TogglService
         if ($snapshot !== null) {
             $isFallbackSnapshot = $this->isFallbackSnapshot($snapshot);
             $isDailyRollupSnapshot = $this->isDailyRollupSnapshot($snapshot);
+            $isManualTimeflipZeroPlaceholderSnapshot = $this->isManualTimeflipZeroPlaceholderSnapshot($snapshot);
 
             if (
                 !$isFallbackSnapshot
                 && !$isDailyRollupSnapshot
+                && !$isManualTimeflipZeroPlaceholderSnapshot
                 && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))
             ) {
                 return $snapshot;
@@ -790,6 +796,10 @@ class TogglService
 
         $secondsByDate = [];
         foreach ($dailySnapshots as $dailySnapshot) {
+            if ($this->isManualTimeflipZeroPlaceholderSnapshot($dailySnapshot)) {
+                return null;
+            }
+
             $date = $dailySnapshot->window_start_date->toDateString();
             $secondsByDate[$date] = max(0, (int) $dailySnapshot->total_tracked_seconds);
         }
@@ -890,6 +900,21 @@ class TogglService
             && ($snapshot->raw_payload['source'] ?? null) === 'daily_rollup';
     }
 
+    private function isManualTimeflipZeroPlaceholderSnapshot(TogglSyncSnapshot $snapshot): bool
+    {
+        if ((int) $snapshot->total_tracked_seconds !== 0 || !is_array($snapshot->raw_payload)) {
+            return false;
+        }
+
+        if (($snapshot->raw_payload['source'] ?? null) === 'timeflip_csv') {
+            return true;
+        }
+
+        $manualSeconds = $snapshot->raw_payload['manual_imports']['timeflip_csv']['seconds'] ?? null;
+
+        return is_numeric($manualSeconds) && (int) $manualSeconds === 0;
+    }
+
     private function isQuotaLimitedSnapshot(TogglSyncSnapshot $snapshot): bool
     {
         return is_array($snapshot->raw_payload)
@@ -904,14 +929,25 @@ class TogglService
         CarbonImmutable $startDate,
         CarbonImmutable $endDate
     ): array {
-        /** @var array<int, string> $dates */
-        $dates = TogglSyncSnapshot::query()
+        /** @var array<int, TogglSyncSnapshot> $snapshots */
+        $snapshots = TogglSyncSnapshot::query()
             ->where('workspace_id', $workspaceId)
             ->whereColumn('window_start_date', 'window_end_date')
             ->whereBetween('window_start_date', [$startDate->toDateString(), $endDate->toDateString()])
-            ->pluck('window_start_date')
-            ->map(static fn ($date): string => CarbonImmutable::parse((string) $date)->toDateString())
+            ->get()
             ->all();
+
+        $dates = [];
+        foreach ($snapshots as $snapshot) {
+            if ($this->isManualTimeflipZeroPlaceholderSnapshot($snapshot)) {
+                continue;
+            }
+
+            $dates[] = $snapshot->window_start_date->toDateString();
+        }
+
+        $dates = array_values(array_unique($dates));
+        sort($dates);
 
         return $dates;
     }
@@ -921,17 +957,36 @@ class TogglService
      */
     private function fetchDailyTotalsByYear(int $workspaceId): array
     {
-        return TogglSyncSnapshot::query()
-            ->selectRaw('YEAR(window_start_date) as year, COUNT(DISTINCT window_start_date) as synced_days')
+        /** @var array<int, TogglSyncSnapshot> $snapshots */
+        $snapshots = TogglSyncSnapshot::query()
             ->where('workspace_id', $workspaceId)
             ->whereColumn('window_start_date', 'window_end_date')
-            ->groupByRaw('YEAR(window_start_date)')
-            ->orderByRaw('YEAR(window_start_date)')
             ->get()
-            ->mapWithKeys(
-                static fn ($row): array => [(int) $row->year => (int) $row->synced_days]
-            )
             ->all();
+
+        $daysByYear = [];
+        foreach ($snapshots as $snapshot) {
+            if ($this->isManualTimeflipZeroPlaceholderSnapshot($snapshot)) {
+                continue;
+            }
+
+            $year = (int) $snapshot->window_start_date->year;
+            $date = $snapshot->window_start_date->toDateString();
+            if (!isset($daysByYear[$year])) {
+                $daysByYear[$year] = [];
+            }
+
+            $daysByYear[$year][$date] = true;
+        }
+
+        ksort($daysByYear);
+
+        $syncedDaysByYear = [];
+        foreach ($daysByYear as $year => $days) {
+            $syncedDaysByYear[(int) $year] = count($days);
+        }
+
+        return $syncedDaysByYear;
     }
 
     private function isCompleteMonthSnapshot(CarbonImmutable $start, CarbonImmutable $end): bool
