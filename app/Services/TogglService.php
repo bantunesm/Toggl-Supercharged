@@ -732,7 +732,11 @@ class TogglService
         } catch (Throwable $throwable) {
             report($throwable);
 
-            if ($snapshot !== null && !$this->isFallbackSnapshot($snapshot)) {
+            if (
+                $snapshot !== null
+                && !$this->isFallbackSnapshot($snapshot)
+                && !$this->isManualTimeflipZeroPlaceholderSnapshot($snapshot)
+            ) {
                 return $snapshot;
             }
 
