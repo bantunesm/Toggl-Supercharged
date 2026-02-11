@@ -17,6 +17,35 @@ class TogglService
     /**
      * @return array{
      *   workspace_id: int,
+     *   date: string,
+     *   seconds: int,
+     *   hours: string,
+     *   synced_at: string,
+     *   has_api_fallback: bool,
+     *   quota_limited: bool
+     * }
+     */
+    public function syncTodaySnapshot(?CarbonImmutable $today = null): array
+    {
+        $today = $today ?? CarbonImmutable::today(config('app.timezone'));
+        $workspaceId = $this->workspaceId();
+        $snapshot = $this->syncPeriodSnapshot($workspaceId, $today, $today);
+        $seconds = max(0, (int) $snapshot->total_tracked_seconds);
+
+        return [
+            'workspace_id' => $workspaceId,
+            'date' => $today->toDateString(),
+            'seconds' => $seconds,
+            'hours' => sprintf('%d:%02d', intdiv($seconds, 3600), intdiv($seconds % 3600, 60)),
+            'synced_at' => $snapshot->synced_at?->toIso8601String() ?? now()->toIso8601String(),
+            'has_api_fallback' => $this->isFallbackSnapshot($snapshot),
+            'quota_limited' => $this->isQuotaLimitedSnapshot($snapshot),
+        ];
+    }
+
+    /**
+     * @return array{
+     *   workspace_id: int,
      *   history_years: int,
      *   daily_days: int,
      *   years_synced: int,

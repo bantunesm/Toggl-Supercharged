@@ -87,6 +87,30 @@ Artisan::command('toggl:warmup {--history-years=} {--daily-days=} {--queued}', f
     ]));
 })->purpose('Warm up Toggl snapshots for dashboard periods and daily heatmap');
 
+Artisan::command('toggl:sync-today', function (TogglService $togglService): void {
+    $recap = $togglService->syncTodaySnapshot();
+
+    $this->info(sprintf(
+        'Toggl today synced: %s (%s)',
+        (string) $recap['date'],
+        (string) $recap['hours']
+    ));
+    $this->line(sprintf('Seconds: %d', (int) $recap['seconds']));
+    $this->line(sprintf('Synced at: %s', (string) $recap['synced_at']));
+
+    if ((bool) $recap['quota_limited']) {
+        $this->warn('Today sync stopped due to Toggl quota limit.');
+    }
+    if ((bool) $recap['has_api_fallback']) {
+        $this->warn('Today sync used fallback data due to API issue.');
+    }
+
+    Log::info('Toggl today sync recap', array_merge($recap, [
+        'trigger' => 'console_sync',
+        'mode' => 'sync_today_command',
+    ]));
+})->purpose('Sync only today Toggl snapshot');
+
 Artisan::command(
     'timeflip:import
     {csv : Path to a TimeFlip CSV export}
@@ -430,6 +454,12 @@ if ($warmupSchedule === 'daily') {
 } else {
     $warmupEvent->hourlyAt($warmupMinute);
 }
+
+Schedule::command('toggl:sync-today')
+    ->everyTenMinutes()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->appendOutputTo(storage_path('logs/toggl-sync-today.log'));
 
 if ((string) config('queue.default', 'database') !== 'sync') {
     Schedule::command('queue:work --queue=default --stop-when-empty --tries=1 --max-time=50')
