@@ -715,12 +715,13 @@ class TogglService
             $isFallbackSnapshot = $this->isFallbackSnapshot($snapshot);
             $isDailyRollupSnapshot = $this->isDailyRollupSnapshot($snapshot);
             $isManualTimeflipZeroPlaceholderSnapshot = $this->isManualTimeflipZeroPlaceholderSnapshot($snapshot);
+            $isClosedSnapshotFinal = $this->isClosedPeriodSnapshotFinal($snapshot, $periodEnd);
 
             if (
                 !$isFallbackSnapshot
                 && !$isDailyRollupSnapshot
                 && !$isManualTimeflipZeroPlaceholderSnapshot
-                && ($isClosedPeriod || $this->isSnapshotFresh($snapshot))
+                && ($isClosedSnapshotFinal || $this->isSnapshotFresh($snapshot))
             ) {
                 return $snapshot;
             }
@@ -858,6 +859,25 @@ class TogglService
 
         return $snapshot->synced_at !== null
             && $snapshot->synced_at->greaterThan(now()->subMinutes($syncTtlMinutes));
+    }
+
+    private function isClosedPeriodSnapshotFinal(
+        TogglSyncSnapshot $snapshot,
+        CarbonImmutable $periodEnd
+    ): bool {
+        if ($snapshot->synced_at === null) {
+            return false;
+        }
+
+        $today = CarbonImmutable::today(config('app.timezone'));
+        if (!$periodEnd->lt($today)) {
+            return false;
+        }
+
+        // If the period is already closed, keep the cached snapshot only when it
+        // was synced after the period end. This avoids freezing "yesterday"
+        // with an early partial value (e.g. sync before midnight).
+        return $snapshot->synced_at->greaterThanOrEqualTo($periodEnd->endOfDay());
     }
 
     private function buildFallbackSnapshot(
