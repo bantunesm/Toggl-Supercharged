@@ -54,6 +54,7 @@ class ExampleTest extends TestCase
                 ->andReturn([
                     'tracking_since' => '2017-01-01',
                     'day' => ['seconds' => 54036, 'date' => '2026-02-05'],
+                    'week' => ['seconds' => 252000, 'start_date' => '2026-02-02', 'end_date' => '2026-02-08'],
                     'month' => ['seconds' => 1070136, 'start_date' => '2024-12-01', 'end_date' => '2024-12-31'],
                     'year' => ['seconds' => 4463424, 'start_date' => '2024-01-01', 'end_date' => '2024-12-31'],
                 ]);

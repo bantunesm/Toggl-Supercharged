@@ -123,6 +123,69 @@
             </div>
         </section>
 
+        @php
+            $currentWeekDeltaClass = $currentWeekDeltaDirection === 'hausse'
+                ? 'text-emerald-700'
+                : ($currentWeekDeltaDirection === 'baisse' ? 'text-rose-700' : 'text-slate-700');
+        @endphp
+        <section class="mt-4 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Semaine en cours</p>
+                    <h2 class="mt-1 text-lg font-semibold text-slate-900">{{ $currentWeekLabel }}</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    @if ($currentWeekBadge === 'elon')
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                            <svg viewBox="0 0 16 16" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+                            {{ $currentWeekBadgeLabel }}
+                        </span>
+                    @elseif ($currentWeekBadge === 'terminator')
+                        <span class="inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800">
+                            <svg viewBox="0 0 16 16" fill="currentColor" class="h-3.5 w-3.5"><path fill-rule="evenodd" d="M8 1.75a.75.75 0 0 1 .692.462l1.41 3.393 3.665.293a.75.75 0 0 1 .428 1.317L11.42 9.69l.855 3.575a.75.75 0 0 1-1.12.814L8 12.2l-3.156 1.88a.75.75 0 0 1-1.12-.814l.856-3.575-2.776-2.475a.75.75 0 0 1 .428-1.317l3.665-.293 1.41-3.393A.75.75 0 0 1 8 1.75Z" clip-rule="evenodd"/></svg>
+                            {{ $currentWeekBadgeLabel }}
+                        </span>
+                    @endif
+                    <p class="mono text-xs text-slate-500">Jour {{ $currentWeekDaysElapsed }}/7</p>
+                </div>
+            </div>
+
+            <div class="mt-4 grid gap-3 sm:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs text-slate-500">Total semaine</p>
+                    <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekHours }} h</p>
+                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                        <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $currentWeekDeltaClass }} {{ $currentWeekDeltaDirection === 'hausse' ? 'border-emerald-200 bg-emerald-50' : ($currentWeekDeltaDirection === 'baisse' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
+                            {{ $currentWeekDeltaPercentLabel }}
+                        </span>
+                        <span class="mono text-xs text-slate-400">S-1: {{ $previousWeekHours }} h</span>
+                    </div>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs text-slate-500">Moyenne/jour</p>
+                    <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekDailyAverageHours }} h/j</p>
+                    <p class="mono mt-2 text-xs text-slate-400">Sur {{ $currentWeekDaysElapsed }} jour(s) écoulé(s)</p>
+                </div>
+
+                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                    <p class="text-xs text-slate-500">vs record semaine</p>
+                    @if ($currentWeekRecordGapHours !== null)
+                        @if ($currentWeekRecordGapDirection === 'record')
+                            <p class="mono mt-2 text-2xl font-semibold text-emerald-700">Record battu</p>
+                            <p class="mt-1 text-xs text-emerald-600">+{{ $currentWeekRecordGapHours }} h au-dessus</p>
+                        @else
+                            <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekRecordGapHours }} h</p>
+                            <p class="mt-1 text-xs text-slate-500">restantes pour le record</p>
+                        @endif
+                    @else
+                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">n/a</p>
+                        <p class="mt-1 text-xs text-slate-500">Pas encore de record</p>
+                    @endif
+                </div>
+            </div>
+        </section>
+
         @if ($showDataWarning)
             <section class="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm">
                 <div class="flex items-start gap-3">

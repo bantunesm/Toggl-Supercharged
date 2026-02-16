@@ -14,7 +14,7 @@
     </div>
 
     <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <article class="highlight-card rounded-xl border p-4 pr-24">
+        <article class="highlight-card rounded-xl border p-4 pr-16">
             <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-cyan-100/75 blur-2xl"></div>
             <div class="highlight-watermark">
                 <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true">
@@ -33,7 +33,26 @@
             <p class="mt-1 text-xs text-slate-500">{{ $allTimeDayRecordDate ?? 'Aucune donnée' }}</p>
         </article>
 
-        <article class="highlight-card rounded-xl border p-4 pr-24">
+        <article class="highlight-card rounded-xl border p-4 pr-16">
+            <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-violet-100/75 blur-2xl"></div>
+            <div class="highlight-watermark">
+                <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true">
+                    <path d="M8 3v3M16 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M8 13h2M10 13h2M12 13h2M14 13h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <p class="text-xs uppercase tracking-wide text-slate-500">Record semaine</p>
+            <p class="mono mt-2 text-2xl font-semibold text-slate-900">
+                @if ($allTimeWeekRecordHours !== null)
+                    {{ $allTimeWeekRecordHours }} h
+                @else
+                    n/a
+                @endif
+            </p>
+            <p class="mt-1 text-xs text-slate-500">{{ $allTimeWeekRecordDate ?? 'Aucune donnée' }}</p>
+        </article>
+
+        <article class="highlight-card rounded-xl border p-4 pr-16">
             <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-teal-100/70 blur-2xl"></div>
             <div class="highlight-watermark">
                 <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true">
@@ -52,7 +71,7 @@
             <p class="mt-1 text-xs text-slate-500">{{ $allTimeMonthRecordDate ?? 'Aucune donnée' }}</p>
         </article>
 
-        <article class="highlight-card rounded-xl border p-4 pr-24">
+        <article class="highlight-card rounded-xl border p-4 pr-16">
             <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-emerald-100/75 blur-2xl"></div>
             <div class="highlight-watermark">
                 <svg viewBox="0 0 24 24" fill="none" class="h-5 w-5" aria-hidden="true">
@@ -69,7 +88,9 @@
             </p>
             <p class="mt-1 text-xs text-slate-500">{{ $allTimeYearRecordDate ?? 'Aucune donnée' }}</p>
         </article>
+    </div>
 
+    <div class="mt-3">
         <article class="highlight-card rounded-xl border p-4 pr-24">
             <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-sky-100/75 blur-2xl"></div>
             <div class="highlight-watermark">
@@ -80,26 +101,28 @@
                 </svg>
             </div>
             <p class="text-xs uppercase tracking-wide text-slate-500">Période actuelle vs record {{ $recordScopeLabel }}</p>
-            <p class="mono mt-2 text-2xl font-semibold text-slate-900">
-                @if ($recordProgressPercent !== null)
-                    {{ $recordProgressPercent }}%
-                @else
-                    n/a
-                @endif
-            </p>
-            @if ($recordProgressPercent !== null && $recordGapHours !== null)
-                <p class="mt-1 text-xs {{ $recordGapDirection === 'record' ? 'text-emerald-700' : 'text-slate-500' }}">
-                    @if ($recordGapDirection === 'record')
-                        Record battu de {{ $recordGapHours }} h
-                    @elseif ($recordGapDirection === 'egalite')
-                        Record égalé
+            <div class="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+                <p class="mono mt-2 text-2xl font-semibold text-slate-900">
+                    @if ($recordProgressPercent !== null)
+                        {{ $recordProgressPercent }}%
                     @else
-                        Encore {{ $recordGapHours }} h pour le record
+                        n/a
                     @endif
                 </p>
-            @else
-                <p class="mt-1 text-xs text-slate-500">Base de comparaison indisponible</p>
-            @endif
+                @if ($recordProgressPercent !== null && $recordGapHours !== null)
+                    <p class="text-sm {{ $recordGapDirection === 'record' ? 'text-emerald-700 font-medium' : 'text-slate-500' }}">
+                        @if ($recordGapDirection === 'record')
+                            Record battu de {{ $recordGapHours }} h
+                        @elseif ($recordGapDirection === 'egalite')
+                            Record égalé
+                        @else
+                            Encore {{ $recordGapHours }} h pour le record
+                        @endif
+                    </p>
+                @else
+                    <p class="text-sm text-slate-500">Base de comparaison indisponible</p>
+                @endif
+            </div>
         </article>
     </div>
 </section>

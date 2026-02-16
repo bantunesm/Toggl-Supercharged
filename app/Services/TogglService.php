@@ -128,6 +128,7 @@ class TogglService
      * @return array{
      *   tracking_since: ?string,
      *   day: ?array{seconds: int, date: string},
+     *   week: ?array{seconds: int, start_date: string, end_date: string},
      *   month: ?array{seconds: int, start_date: string, end_date: string},
      *   year: ?array{seconds: int, start_date: string, end_date: string}
      * }
@@ -135,7 +136,7 @@ class TogglService
     public function getAllTimeRecords(): array
     {
         $workspaceId = $this->workspaceId();
-        $cacheKey = sprintf('toggl.records.all_time.v5.%d', $workspaceId);
+        $cacheKey = sprintf('toggl.records.all_time.v6.%d', $workspaceId);
 
         return Cache::remember(
             $cacheKey,
@@ -211,9 +212,12 @@ class TogglService
                     }
                 }
 
+                $weekRecord = $this->computeWeekRecordFromDailySnapshots($workspaceId);
+
                 return [
                     'tracking_since' => $trackingSince !== null ? (string) $trackingSince : null,
                     'day' => $dayRecord,
+                    'week' => $weekRecord,
                     'month' => $monthRecord,
                     'year' => $yearRecord,
                 ];
@@ -1062,6 +1066,60 @@ class TogglService
         }
 
         return $syncedDaysByYear;
+    }
+
+    /**
+     * @return array{seconds: int, start_date: string, end_date: string}|null
+     */
+    private function computeWeekRecordFromDailySnapshots(int $workspaceId): ?array
+    {
+        /** @var array<int, TogglSyncSnapshot> $dailySnapshots */
+        $dailySnapshots = TogglSyncSnapshot::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereColumn('window_start_date', 'window_end_date')
+            ->where('total_tracked_seconds', '>', 0)
+            ->get()
+            ->all();
+
+        $weeklyTotals = [];
+        foreach ($dailySnapshots as $snapshot) {
+            if ($this->isFallbackSnapshot($snapshot) || $this->isManualTimeflipZeroPlaceholderSnapshot($snapshot)) {
+                continue;
+            }
+
+            $date = CarbonImmutable::parse((string) $snapshot->window_start_date, config('app.timezone'))->startOfDay();
+            $weekKey = sprintf('%d-W%02d', $date->isoWeekYear, $date->isoWeek);
+            $weeklyTotals[$weekKey] = ($weeklyTotals[$weekKey] ?? 0) + max(0, (int) $snapshot->total_tracked_seconds);
+        }
+
+        if ($weeklyTotals === []) {
+            return null;
+        }
+
+        $bestWeekKey = null;
+        $bestSeconds = 0;
+        foreach ($weeklyTotals as $weekKey => $seconds) {
+            if ($seconds > $bestSeconds) {
+                $bestSeconds = $seconds;
+                $bestWeekKey = $weekKey;
+            }
+        }
+
+        if ($bestWeekKey === null || $bestSeconds <= 0) {
+            return null;
+        }
+
+        preg_match('/^(\d+)-W(\d+)$/', $bestWeekKey, $matches);
+        $weekStart = CarbonImmutable::create((int) $matches[1], 1, 1, 0, 0, 0, config('app.timezone'))
+            ->setISODate((int) $matches[1], (int) $matches[2])
+            ->startOfDay();
+        $weekEnd = $weekStart->addDays(6);
+
+        return [
+            'seconds' => $bestSeconds,
+            'start_date' => $weekStart->toDateString(),
+            'end_date' => $weekEnd->toDateString(),
+        ];
     }
 
     private function isCompleteMonthSnapshot(CarbonImmutable $start, CarbonImmutable $end): bool

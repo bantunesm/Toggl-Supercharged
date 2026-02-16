@@ -243,6 +243,7 @@ class ProductivityDashboardController extends Controller
         $countryRows = $this->buildBenchmarkRows($currentDailyAverageHours, $this->countryBenchmarks());
 
         $allTimeDayRecord = $allTimeRecords['day'];
+        $allTimeWeekRecord = $allTimeRecords['week'];
         $allTimeMonthRecord = $allTimeRecords['month'];
         $allTimeYearRecord = $allTimeRecords['year'];
         $recordScopeLabel = $selectedMonth !== null ? 'mensuel' : 'annuel';
@@ -281,6 +282,40 @@ class ProductivityDashboardController extends Controller
         $dayBeforeYesterdayMetrics = $togglService->getPeriodMetrics($dayBeforeYesterday, $dayBeforeYesterday);
         $last7DaysMetrics = $togglService->getPeriodMetrics($last7DaysStart, $yesterday);
         $previous7DaysMetrics = $togglService->getPeriodMetrics($previous7DaysStart, $previous7DaysEnd);
+
+        $currentWeekStart = $today->startOfWeek(CarbonImmutable::MONDAY);
+        $currentWeekEnd = $currentWeekStart->addDays(6);
+        $previousWeekStart = $currentWeekStart->subWeek();
+        $previousWeekEnd = $previousWeekStart->addDays(6);
+        $currentWeekMetrics = $togglService->getPeriodMetrics($currentWeekStart, $today);
+        $previousWeekMetrics = $togglService->getPeriodMetrics($previousWeekStart, $previousWeekEnd);
+        $currentWeekTotalSeconds = (int) $currentWeekMetrics['total_seconds'];
+        $previousWeekTotalSeconds = (int) $previousWeekMetrics['total_seconds'];
+        $currentWeekDeltaSeconds = $currentWeekTotalSeconds - $previousWeekTotalSeconds;
+        $currentWeekDeltaPercent = $this->computeDeltaPercent($currentWeekTotalSeconds, $previousWeekTotalSeconds);
+        $currentWeekDeltaDirection = $currentWeekDeltaSeconds > 0 ? 'hausse' : ($currentWeekDeltaSeconds < 0 ? 'baisse' : 'stable');
+        $currentWeekDaysElapsed = (int) $currentWeekStart->diffInDays($today) + 1;
+        $currentWeekDailyAverageSeconds = $currentWeekDaysElapsed > 0 ? $currentWeekTotalSeconds / $currentWeekDaysElapsed : 0.0;
+        $currentWeekBadge = null;
+        $currentWeekBadgeLabel = null;
+        if ($currentWeekTotalSeconds >= 80 * 3600) {
+            $currentWeekBadge = 'elon';
+            $currentWeekBadgeLabel = 'Elon Musk';
+        } elseif ($currentWeekTotalSeconds >= 50 * 3600) {
+            $currentWeekBadge = 'terminator';
+            $currentWeekBadgeLabel = 'Terminator';
+        }
+        $currentWeekNumber = (int) $today->isoWeek;
+        $currentWeekLabel = sprintf(
+            'Semaine %d · %s - %s',
+            $currentWeekNumber,
+            $currentWeekStart->locale('fr')->isoFormat('D MMM'),
+            $currentWeekEnd->locale('fr')->isoFormat('D MMM YYYY')
+        );
+        $currentWeekRecordSeconds = (int) ($allTimeWeekRecord['seconds'] ?? 0);
+        $currentWeekRecordGapSeconds = $currentWeekRecordSeconds > 0
+            ? $currentWeekRecordSeconds - $currentWeekTotalSeconds
+            : null;
 
         $todayTotalSeconds = (int) $todayMetrics['total_seconds'];
         $todayProgressPercent = (float) $todayMetrics['progress_ratio'] * 100;
@@ -563,6 +598,14 @@ class ProductivityDashboardController extends Controller
             'allTimeDayRecordDate' => $allTimeDayRecord !== null
                 ? $this->formatDateForDisplay((string) $allTimeDayRecord['date'])
                 : null,
+            'allTimeWeekRecordHours' => $allTimeWeekRecord !== null ? $this->formatHours((int) $allTimeWeekRecord['seconds']) : null,
+            'allTimeWeekRecordDate' => $allTimeWeekRecord !== null
+                ? sprintf(
+                    'Semaine %d · %s',
+                    CarbonImmutable::parse($allTimeWeekRecord['start_date'], config('app.timezone'))->isoWeek,
+                    CarbonImmutable::parse($allTimeWeekRecord['start_date'], config('app.timezone'))->isoWeekYear
+                )
+                : null,
             'allTimeMonthRecordHours' => $allTimeMonthRecord !== null ? $this->formatHours((int) $allTimeMonthRecord['seconds']) : null,
             'allTimeMonthRecordDate' => $allTimeMonthRecord !== null
                 ? ucfirst(CarbonImmutable::parse($allTimeMonthRecord['start_date'], config('app.timezone'))->locale('fr')->isoFormat('MMMM YYYY'))
@@ -607,6 +650,23 @@ class ProductivityDashboardController extends Controller
             'weeklyDeltaDirection' => $weeklyDeltaDirection,
             'weeklyProgressPercent' => number_format(((float) $last7DaysMetrics['progress_ratio']) * 100, 1),
             'weeklyProgressBarPercent' => number_format(min(100.0, max(0.0, ((float) $last7DaysMetrics['progress_ratio']) * 100)), 1),
+            'currentWeekLabel' => $currentWeekLabel,
+            'currentWeekNumber' => $currentWeekNumber,
+            'currentWeekHours' => $this->formatHours($currentWeekTotalSeconds),
+            'currentWeekTotalSeconds' => $currentWeekTotalSeconds,
+            'currentWeekDaysElapsed' => $currentWeekDaysElapsed,
+            'currentWeekDailyAverageHours' => $this->formatHours($currentWeekDailyAverageSeconds),
+            'currentWeekDeltaHours' => $this->formatSignedHours($currentWeekDeltaSeconds),
+            'currentWeekDeltaPercent' => $currentWeekDeltaPercent === null ? null : number_format($currentWeekDeltaPercent, 1),
+            'currentWeekDeltaPercentLabel' => $currentWeekDeltaPercent === null
+                ? 'n/a'
+                : (($currentWeekDeltaPercent > 0 ? '+' : '').number_format($currentWeekDeltaPercent, 1).'%'),
+            'currentWeekDeltaDirection' => $currentWeekDeltaDirection,
+            'previousWeekHours' => $this->formatHours($previousWeekTotalSeconds),
+            'currentWeekBadge' => $currentWeekBadge,
+            'currentWeekBadgeLabel' => $currentWeekBadgeLabel,
+            'currentWeekRecordGapHours' => $currentWeekRecordGapSeconds !== null ? $this->formatHours(abs($currentWeekRecordGapSeconds)) : null,
+            'currentWeekRecordGapDirection' => $currentWeekRecordGapSeconds === null ? null : ($currentWeekRecordGapSeconds <= 0 ? 'record' : 'manque'),
         ]);
     }
 
