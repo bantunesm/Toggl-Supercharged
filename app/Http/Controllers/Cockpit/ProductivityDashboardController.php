@@ -306,9 +306,9 @@ class ProductivityDashboardController extends Controller
             $currentWeekBadgeLabel = 'Terminator';
         }
         $currentWeekNumber = (int) $today->isoWeek;
-        $currentWeekLabel = sprintf(
-            'Semaine %d · %s - %s',
-            $currentWeekNumber,
+        $currentWeekLabel = sprintf('Semaine %d', $currentWeekNumber);
+        $currentWeekDateRange = sprintf(
+            '%s - %s',
             $currentWeekStart->locale('fr')->isoFormat('D MMM'),
             $currentWeekEnd->locale('fr')->isoFormat('D MMM YYYY')
         );
@@ -651,6 +651,7 @@ class ProductivityDashboardController extends Controller
             'weeklyProgressPercent' => number_format(((float) $last7DaysMetrics['progress_ratio']) * 100, 1),
             'weeklyProgressBarPercent' => number_format(min(100.0, max(0.0, ((float) $last7DaysMetrics['progress_ratio']) * 100)), 1),
             'currentWeekLabel' => $currentWeekLabel,
+            'currentWeekDateRange' => $currentWeekDateRange,
             'currentWeekNumber' => $currentWeekNumber,
             'currentWeekHours' => $this->formatHours($currentWeekTotalSeconds),
             'currentWeekTotalSeconds' => $currentWeekTotalSeconds,
@@ -1042,14 +1043,36 @@ class ProductivityDashboardController extends Controller
     private function resolveHeatmapPeriod(int $year, ?int $month): array
     {
         if ($month === null) {
+            $today = CarbonImmutable::today(config('app.timezone'));
+            $currentYear = (int) $today->year;
+
+            if ($year === $currentYear) {
+                $end = $today;
+                $start = $end->subDays(364)->startOfDay();
+
+                return [$start, $end];
+            }
+
             $start = CarbonImmutable::create($year, 1, 1, 0, 0, 0, config('app.timezone'))->startOfYear();
 
             return [$start, $start->endOfYear()];
         }
 
-        $start = CarbonImmutable::create($year, $month, 1, 0, 0, 0, config('app.timezone'))->startOfMonth();
+        $today = CarbonImmutable::today(config('app.timezone'));
+        $currentYear = (int) $today->year;
+        $currentMonth = (int) $today->month;
 
-        return [$start, $start->endOfMonth()];
+        if ($year === $currentYear && $month === $currentMonth) {
+            $end = $today;
+            $start = $end->subDays(364)->startOfDay();
+
+            return [$start, $end];
+        }
+
+        $monthEnd = CarbonImmutable::create($year, $month, 1, 0, 0, 0, config('app.timezone'))->endOfMonth();
+        $start = $monthEnd->subDays(364)->startOfDay();
+
+        return [$start, $monthEnd];
     }
 
     /**

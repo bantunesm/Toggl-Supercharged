@@ -25,166 +25,205 @@
     @include('cockpit.partials.welcome-modal')
 
     <main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        <section class="rounded-2xl border border-slate-200/80 bg-white/85 p-6 shadow-sm backdrop-blur">
-            <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <header>
-                    <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Cockpit</p>
-                    <h1 class="mt-1 text-3xl font-bold text-slate-900">Productivité Toggl</h1>
-                    <p class="mt-2 text-sm text-slate-600">
-                        Analyse par période fixe (mois/année): <span class="font-semibold text-slate-800">{{ $periodLabel }}</span>
-                    </p>
-                    <div class="mt-3 flex flex-wrap items-center gap-2">
-                        <a
-                            href="{{ $switchToCurrentMonthUrl }}"
-                            class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {{ $isCurrentMonthSelected ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
-                        >
-                            Mois en cours
-                        </a>
-                        <a
-                            href="{{ $switchToYearlyUrl }}"
-                            class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {{ $isYearlyView ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
-                        >
-                            Vue annuelle
-                        </a>
-
-                        @if ($previousPeriodUrl !== null)
-                            <a href="{{ $previousPeriodUrl }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400">
-                                ← {{ $previousPeriodLabel }}
-                            </a>
-                        @endif
-
-                        @if ($nextPeriodUrl !== null)
-                            <a href="{{ $nextPeriodUrl }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400">
-                                {{ $nextPeriodLabel }} →
-                            </a>
-                        @endif
-                    </div>
-                </header>
-
-                <form method="GET" action="{{ route('cockpit.productivity') }}" class="grid w-full gap-3 sm:grid-cols-12 sm:items-end lg:w-auto">
-                    <input type="hidden" name="yearly_scope" value="{{ $yearlyScope }}" data-yearly-scope-input>
-                    <label class="flex flex-col gap-1 text-sm text-slate-600 sm:col-span-4">
-                        <span>Année</span>
-                        <select name="year" class="h-10 rounded-lg border-slate-300 bg-white text-slate-900">
-                            @foreach ($yearsForSelect as $year)
-                                <option value="{{ $year }}" @selected($selectedYear === $year)>{{ $year }}</option>
-                            @endforeach
-                        </select>
-                    </label>
-
-                    <label class="flex flex-col gap-1 text-sm text-slate-600 sm:col-span-5">
-                        <span>Mois (optionnel)</span>
-                        <select name="month" class="h-10 rounded-lg border-slate-300 bg-white text-slate-900">
-                            <option value="">Toute l'année</option>
-                            @foreach ($monthsForSelect as $monthValue => $monthLabel)
-                                <option
-                                    value="{{ $monthValue }}"
-                                    @selected($selectedMonth === $monthValue)
-                                    @disabled($selectedYear === $currentYear && $monthValue > $currentMonthNumber)
-                                >
-                                    {{ $monthLabel }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </label>
-
-                    <button type="submit" class="h-10 min-w-[110px] justify-self-start rounded-lg bg-teal-700 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800 sm:col-span-3">
-                        Filtrer
-                    </button>
-                </form>
-            </div>
-
-            <div class="dashboard-spotlight mt-5 rounded-2xl border border-teal-200/60 p-4 pl-8 shadow-inner shadow-teal-50">
-                <div class="grid gap-8 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-                    <div class="spotlight-avatar mx-auto md:mx-0">
-                        <img
-                            src="{{ asset('images/1758276756115.jpeg') }}"
-                            alt="Avatar de monsieur Antunes"
-                            class="relative z-[1] h-20 w-20 rounded-full border-4 border-white object-cover shadow-lg shadow-teal-900/20"
-                        >
-                    </div>
-
-                    <div class="text-center md:text-left">
-                        <p class="text-xs uppercase tracking-[0.2em] text-teal-700">Focus du jour</p>
-                        <h2 class="mt-1 text-2xl font-bold text-slate-900">Monsieur Antunes, vous êtes aux commandes.</h2>
-                        <p class="mt-2 text-sm text-slate-700">{{ $motivationMessage }}</p>
-                    </div>
-
-                    <div class="rounded-xl border border-teal-200 bg-white/80 p-3 md:min-w-[220px]">
-                        <p class="text-xs text-slate-500">Aujourd'hui</p>
-                        <p class="mono mt-1 text-2xl font-semibold text-slate-900">{{ $todayHours }} h</p>
-                        <p class="mono mt-1 text-xs text-slate-600">{{ $todayProgressPercent }}% objectif atteint</p>
-                        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-teal-100">
-                            <div class="h-full rounded-full bg-teal-600" style="width: {{ $todayProgressBarPercent }}%;"></div>
-                        </div>
-                        <p class="mono mt-2 text-xs {{ $todayVsYesterdayClass }}">vs veille: {{ $todayVsYesterdayPercentLabel }}</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         @php
             $currentWeekDeltaClass = $currentWeekDeltaDirection === 'hausse'
                 ? 'text-emerald-700'
                 : ($currentWeekDeltaDirection === 'baisse' ? 'text-rose-700' : 'text-slate-700');
         @endphp
-        <section class="mt-4 rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-            <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                    <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Semaine en cours</p>
-                    <h2 class="mt-1 text-lg font-semibold text-slate-900">{{ $currentWeekLabel }}</h2>
+        <div class="grid gap-4 xl:grid-cols-[minmax(0,_75fr)_minmax(0,_25fr)]">
+            <section class="rounded-2xl border border-slate-200/80 bg-white/85 p-6 shadow-sm backdrop-blur flex flex-col justify-between">
+                <div class="flex justify-between items-end mb-2.5">
+                    <div>
+                        <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Cockpit</p>
+                        <h1 class="mt-1 text-3xl font-bold text-slate-900">Productivité Toggl</h1>
+                    </div>
+                    <p class="mt-2 text-sm text-slate-600">
+                        Analyse par période fixe (mois/année): <span class="font-semibold text-slate-800">{{ $periodLabel }}</span>
+                    </p>
                 </div>
-                <div class="flex items-center gap-2">
+
+                <div class="dashboard-spotlight rounded-2xl border border-teal-200/60 p-4 pl-8 shadow-inner shadow-teal-50">
+                    <div class="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between mb-6">
+                        <header>
+                            <div class="mt-3 flex flex-wrap items-center gap-2">
+                                <a
+                                    href="{{ $switchToCurrentMonthUrl }}"
+                                    class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {{ $isCurrentMonthSelected ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
+                                >
+                                    Mois en cours
+                                </a>
+                                <a
+                                    href="{{ $switchToYearlyUrl }}"
+                                    class="rounded-lg border px-3 py-1.5 text-xs font-medium transition {{ $isYearlyView ? 'border-teal-700 bg-teal-700 text-white' : 'border-slate-300 bg-white text-slate-700 hover:border-teal-600 hover:text-teal-700' }}"
+                                >
+                                    Vue annuelle
+                                </a>
+
+                                @if ($previousPeriodUrl !== null)
+                                    <a href="{{ $previousPeriodUrl }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400">
+                                        ← {{ $previousPeriodLabel }}
+                                    </a>
+                                @endif
+
+                                @if ($nextPeriodUrl !== null)
+                                    <a href="{{ $nextPeriodUrl }}" class="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-400">
+                                        {{ $nextPeriodLabel }} →
+                                    </a>
+                                @endif
+                            </div>
+                        </header>
+
+                        <form method="GET" action="{{ route('cockpit.productivity') }}" class="grid w-full gap-3 sm:grid-cols-12 sm:items-end lg:w-auto">
+                            <input type="hidden" name="yearly_scope" value="{{ $yearlyScope }}" data-yearly-scope-input>
+                            <label class="flex flex-col text-sm text-slate-600 sm:col-span-4 text-right">
+                                {{-- <span>Année</span> --}}
+                                <select name="year" class="h-7 rounded-lg border-slate-300 bg-white text-slate-900">
+                                    @foreach ($yearsForSelect as $year)
+                                        <option value="{{ $year }}" @selected($selectedYear === $year)>{{ $year }}</option>
+                                    @endforeach
+                                </select>
+                            </label>
+
+                            <label class="flex flex-col text-sm text-slate-600 sm:col-span-5 text-right">
+                                {{-- <span>Mois (optionnel)</span> --}}
+                                <select name="month" class="h-7 rounded-lg border-slate-300 bg-white text-slate-900">
+                                    <option value="">Toute l'année</option>
+                                    @foreach ($monthsForSelect as $monthValue => $monthLabel)
+                                        <option
+                                            value="{{ $monthValue }}"
+                                            @selected($selectedMonth === $monthValue)
+                                            @disabled($selectedYear === $currentYear && $monthValue > $currentMonthNumber)
+                                        >
+                                            {{ $monthLabel }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </label>
+
+                            <button type="submit" class="h-7 min-w-[70px] justify-self-start rounded-lg bg-teal-700 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-teal-800 sm:col-span-3">
+                                Filtrer
+                            </button>
+                        </form>
+                    </div>
+                    <div class="grid gap-8 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+                        <div class="spotlight-avatar mx-auto md:mx-0">
+                            <img
+                                src="{{ asset('images/1758276756115.jpeg') }}"
+                                alt="Avatar de monsieur Antunes"
+                                class="relative z-[1] h-20 w-20 rounded-full border-4 border-white object-cover shadow-lg shadow-teal-900/20"
+                            >
+                        </div>
+
+                        <div class="text-center md:text-left">
+                            <p class="text-xs uppercase tracking-[0.2em] text-teal-700">Focus du jour</p>
+                            <h2 class="mt-1 text-2xl font-bold text-slate-900">Monsieur Antunes, vous êtes aux commandes.</h2>
+                            <p class="mt-2 text-sm text-slate-700">{{ $motivationMessage }}</p>
+                        </div>
+
+                        <div class="rounded-xl border border-teal-200 bg-white/80 p-3 md:min-w-[220px]">
+                            <p class="text-xs text-slate-500">Aujourd'hui</p>
+                            <p class="mono mt-1 text-2xl font-semibold text-slate-900">{{ $todayHours }} h</p>
+                            <p class="mono mt-1 text-xs text-slate-600">{{ $todayProgressPercent }}% objectif atteint</p>
+                            <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-teal-100">
+                                <div class="h-full rounded-full bg-teal-600" style="width: {{ $todayProgressBarPercent }}%;"></div>
+                            </div>
+                            <p class="mono mt-2 text-xs {{ $todayVsYesterdayClass }}">vs veille: {{ $todayVsYesterdayPercentLabel }}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white/90 p-6 shadow-sm">
+                <div>
+                    <div class="flex justify-between items-start">
+                        <p class="text-xs uppercase tracking-[0.2em] text-slate-500">Semaine en cours</p>
+                        <p class="-mt-1 text-sm font-semibold text-slate-900" title="{{ $currentWeekDateRange }}">
+                            {{ $currentWeekLabel }}
+                        </p>
+                    </div>
+
                     @if ($currentWeekBadge === 'elon')
-                        <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
-                            <svg viewBox="0 0 16 16" fill="currentColor" class="h-3.5 w-3.5"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.75.75 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+                        <span class="group mt-2 inline-flex w-fit items-center gap-2 rounded-full border border-amber-300 bg-amber-50 py-1 pl-1 pr-3 text-xs font-semibold text-amber-800 transition hover:bg-amber-100">
+                            <img src="{{ asset('images/elon.png') }}" alt="Elon Musk" class="h-7 w-7 rounded-full object-contain transition-transform duration-300 group-hover:rotate-12 group-hover:scale-125">
                             {{ $currentWeekBadgeLabel }}
                         </span>
                     @elseif ($currentWeekBadge === 'terminator')
-                        <span class="inline-flex items-center gap-1.5 rounded-full border border-rose-300 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-800">
-                            <svg viewBox="0 0 16 16" fill="currentColor" class="h-3.5 w-3.5"><path fill-rule="evenodd" d="M8 1.75a.75.75 0 0 1 .692.462l1.41 3.393 3.665.293a.75.75 0 0 1 .428 1.317L11.42 9.69l.855 3.575a.75.75 0 0 1-1.12.814L8 12.2l-3.156 1.88a.75.75 0 0 1-1.12-.814l.856-3.575-2.776-2.475a.75.75 0 0 1 .428-1.317l3.665-.293 1.41-3.393A.75.75 0 0 1 8 1.75Z" clip-rule="evenodd"/></svg>
+                        <span class="group mt-2 inline-flex w-fit items-center gap-2 rounded-full border border-rose-300 bg-rose-50 py-1 pl-1 pr-3 text-xs font-semibold text-rose-800 transition hover:bg-rose-100">
+                            <img src="{{ asset('images/terminator.png') }}" alt="Terminator" class="h-7 w-7 rounded-full object-contain transition-transform duration-300 group-hover:-rotate-6 group-hover:scale-125">
                             {{ $currentWeekBadgeLabel }}
                         </span>
                     @endif
-                    <p class="mono text-xs text-slate-500">Jour {{ $currentWeekDaysElapsed }}/7</p>
                 </div>
-            </div>
 
-            <div class="mt-4 grid gap-3 sm:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 bg-white p-4">
-                    <p class="text-xs text-slate-500">Total semaine</p>
-                    <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekHours }} h</p>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
+                <div class="mt-5">
+                    <p class="mono text-4xl font-bold text-slate-900">{{ $currentWeekHours }} <span class="text-lg font-semibold text-slate-500">h</span></p>
+                    <div class="mt-2 flex items-center gap-2">
                         <span class="mono inline-flex items-center rounded-full border px-2 py-0.5 text-xs {{ $currentWeekDeltaClass }} {{ $currentWeekDeltaDirection === 'hausse' ? 'border-emerald-200 bg-emerald-50' : ($currentWeekDeltaDirection === 'baisse' ? 'border-rose-200 bg-rose-50' : 'border-slate-200 bg-slate-50') }}">
                             {{ $currentWeekDeltaPercentLabel }}
                         </span>
-                        <span class="mono text-xs text-slate-400">S-1: {{ $previousWeekHours }} h</span>
+                        <span class="mono text-xs text-slate-400">vs S-1</span>
                     </div>
                 </div>
 
-                <div class="rounded-xl border border-slate-200 bg-white p-4">
-                    <p class="text-xs text-slate-500">Moyenne/jour</p>
-                    <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekDailyAverageHours }} h/j</p>
-                    <p class="mono mt-2 text-xs text-slate-400">Sur {{ $currentWeekDaysElapsed }} jour(s) écoulé(s)</p>
+                @php
+                    $terminatorTarget = 50 * 3600;
+                    $elonTarget = 80 * 3600;
+                    $terminatorPercent = min(100, round($currentWeekTotalSeconds / $terminatorTarget * 100));
+                    $elonPercent = min(100, round($currentWeekTotalSeconds / $elonTarget * 100));
+                    $terminatorReached = $currentWeekTotalSeconds >= $terminatorTarget;
+                    $elonReached = $currentWeekTotalSeconds >= $elonTarget;
+                @endphp
+                <div class="mt-5 space-y-3 border-t border-slate-100 pt-4">
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="flex items-center gap-1.5 text-xs font-medium {{ $terminatorReached ? 'text-rose-700' : 'text-slate-500' }}">
+                                <img src="{{ asset('images/terminator.png') }}" alt="" class="h-5 w-5 rounded-full object-contain {{ $terminatorReached ? 'animate-shake' : '' }}">
+                                Terminator · 50h
+                            </span>
+                            <span class="mono text-xs {{ $terminatorReached ? 'font-semibold text-rose-700' : 'text-slate-400' }}">{{ $terminatorPercent }}%</span>
+                        </div>
+                        <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full {{ $terminatorReached ? 'bg-rose-100' : 'bg-slate-100' }}">
+                            <div class="h-full rounded-full transition-all duration-700 {{ $terminatorReached ? 'bg-rose-500' : 'bg-slate-300' }}" style="width: {{ $terminatorPercent }}%;"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <span class="flex items-center gap-1.5 text-xs font-medium {{ $elonReached ? 'text-amber-700' : 'text-slate-500' }}">
+                                <img src="{{ asset('images/elon.png') }}" alt="" class="h-5 w-5 rounded-full object-contain {{ $elonReached ? 'animate-shake' : '' }}">
+                                Elon Musk · 80h
+                            </span>
+                            <span class="mono text-xs {{ $elonReached ? 'font-semibold text-amber-700' : 'text-slate-400' }}">{{ $elonPercent }}%</span>
+                        </div>
+                        <div class="mt-1 h-1.5 w-full overflow-hidden rounded-full {{ $elonReached ? 'bg-amber-100' : 'bg-slate-100' }}">
+                            <div class="h-full rounded-full transition-all duration-700 {{ $elonReached ? 'bg-amber-500' : 'bg-slate-300' }}" style="width: {{ $elonPercent }}%;"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="rounded-xl border border-slate-200 bg-white p-4">
-                    <p class="text-xs text-slate-500">vs record semaine</p>
-                    @if ($currentWeekRecordGapHours !== null)
-                        @if ($currentWeekRecordGapDirection === 'record')
-                            <p class="mono mt-2 text-2xl font-semibold text-emerald-700">Record battu</p>
-                            <p class="mt-1 text-xs text-emerald-600">+{{ $currentWeekRecordGapHours }} h au-dessus</p>
+                <div class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-500">Moyenne/jour</span>
+                        <span class="mono text-sm font-semibold text-slate-900">{{ $currentWeekDailyAverageHours }} h/j</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-500">Semaine préc.</span>
+                        <span class="mono text-sm text-slate-600">{{ $previousWeekHours }} h</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-500">vs record</span>
+                        @if ($currentWeekRecordGapHours !== null)
+                            @if ($currentWeekRecordGapDirection === 'record')
+                                <span class="mono text-sm font-semibold text-emerald-700">+{{ $currentWeekRecordGapHours }} h</span>
+                            @else
+                                <span class="mono text-sm text-slate-600">-{{ $currentWeekRecordGapHours }} h</span>
+                            @endif
                         @else
-                            <p class="mono mt-2 text-2xl font-semibold text-slate-900">{{ $currentWeekRecordGapHours }} h</p>
-                            <p class="mt-1 text-xs text-slate-500">restantes pour le record</p>
+                            <span class="mono text-sm text-slate-400">n/a</span>
                         @endif
-                    @else
-                        <p class="mono mt-2 text-2xl font-semibold text-slate-900">n/a</p>
-                        <p class="mt-1 text-xs text-slate-500">Pas encore de record</p>
-                    @endif
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
+        </div>
 
         @if ($showDataWarning)
             <section class="mt-4 rounded-2xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm">
@@ -259,6 +298,107 @@
                         {{ $bestMonthVariationPercentLabel }}
                     </span>
                     <span class="mono text-xs text-slate-400">{{ $previousScoreLabel }}: {{ $previousBestMonthHours }} h</span>
+                </div>
+            </article>
+        </section>
+
+                <section class="mt-6 grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+            <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-900">Heatmap journalière</h2>
+                <p class="mt-1 text-sm text-slate-500">
+                    {{ $heatmapTrackedDays }} jours tracés · max journalier {{ $heatmapMaxHours }} h
+                </p>
+
+                <div class="mt-4 overflow-x-auto pb-2">
+                    <div class="inline-flex min-w-max items-start gap-1.5">
+                        <div class="mt-4 grid grid-rows-7 gap-0.5 pr-1 text-[10px] text-slate-500">
+                            <div class="h-[10px] leading-[10px]">Lun</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]">Mer</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]">Ven</div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                            <div class="h-[10px] leading-[10px]"></div>
+                        </div>
+
+                        <div>
+                            <div class="mb-1 flex gap-0.5">
+                                @foreach ($heatmapWeekLabels as $monthLabel)
+                                    <div class="relative h-[10px] w-[10px]">
+                                        @if ($monthLabel !== '')
+                                            <span class="absolute left-0 top-0 whitespace-nowrap text-[10px] leading-[10px] text-slate-500">
+                                                {{ $monthLabel }}
+                                            </span>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            <div class="flex gap-0.5">
+                                @foreach ($heatmapWeeks as $week)
+                                    <div class="flex w-[10px] flex-col gap-0.5">
+                                        @foreach ($week as $cell)
+                                            @if (($cell['type'] ?? '') === 'day')
+                                                @php
+                                                    $isMissingCell = (bool) ($cell['is_missing'] ?? false);
+                                                    $cellTitle = $isMissingCell
+                                                        ? ($cell['label'].' · a completer')
+                                                        : ($cell['label'].' · '.$cell['hours'].' h');
+                                                @endphp
+                                                <div
+                                                    title="{{ $cellTitle }}"
+                                                    class="h-[10px] w-[10px] rounded-[3px] {{ $cell['color_class'] }} border {{ $isMissingCell ? 'border-slate-300' : 'border-slate-200/70' }}"
+                                                ></div>
+                                            @else
+                                                <div class="h-[10px] w-[10px] rounded-[3px] bg-transparent"></div>
+                                            @endif
+                                        @endforeach
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span>A completer</span>
+                    <span class="h-3 w-3 rounded bg-white border border-slate-300"></span>
+                    <span>Faible</span>
+                    <span class="h-3 w-3 rounded bg-slate-100 border border-slate-200/70"></span>
+                    <span class="h-3 w-3 rounded bg-emerald-100 border border-slate-200/70"></span>
+                    <span class="h-3 w-3 rounded bg-emerald-300 border border-slate-200/70"></span>
+                    <span class="h-3 w-3 rounded bg-emerald-500 border border-slate-200/70"></span>
+                    <span class="h-3 w-3 rounded bg-emerald-700 border border-slate-200/70"></span>
+                    <span>Fort</span>
+                </div>
+            </article>
+
+            <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
+                <h2 class="text-lg font-semibold text-slate-900">Comparatif vs période précédente</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ $comparisonLabel }}</p>
+
+                @php
+                    $comparisonColor = $comparisonDirection === 'hausse' ? 'text-emerald-700' : 'text-rose-700';
+                @endphp
+
+                <div class="mt-4 flex gap-4">
+                    <div class="rounded-xl border border-slate-200 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Delta heures totales</p>
+                        <p class="mono mt-2 text-2xl font-semibold {{ $comparisonColor }}">{{ $comparisonTotalDeltaHours }} h</p>
+                        <p class="mono mt-1 text-xs text-slate-500">
+                            @if ($comparisonTotalDeltaPercent !== null)
+                                {{ $comparisonTotalDeltaPercent }}%
+                            @else
+                                n/a (base précédente à 0)
+                            @endif
+                        </p>
+                    </div>
+
+                    <div class="rounded-xl border border-slate-200 p-4">
+                        <p class="text-xs uppercase tracking-wide text-slate-500">Delta moyenne/jour</p>
+                        <p class="mono mt-2 text-2xl font-semibold {{ $comparisonColor }}">{{ $comparisonAverageDeltaHours }} h/j</p>
+                        <p class="mt-1 text-xs text-slate-500">{{ ucfirst($comparisonDirection) }} sur la période</p>
+                    </div>
                 </div>
             </article>
         </section>
@@ -392,107 +532,6 @@
                     </div>
                 </div>
             </div>
-        </section>
-
-        <section class="mt-6 grid gap-4 xl:grid-cols-[minmax(0,_0.85fr)_minmax(0,_1.15fr)] 2xl:grid-cols-[minmax(0,_0.8fr)_minmax(0,_1.2fr)]">
-            <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-                <h2 class="text-lg font-semibold text-slate-900">Comparatif vs période précédente</h2>
-                <p class="mt-1 text-sm text-slate-500">{{ $comparisonLabel }}</p>
-
-                @php
-                    $comparisonColor = $comparisonDirection === 'hausse' ? 'text-emerald-700' : 'text-rose-700';
-                @endphp
-
-                <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                    <div class="rounded-xl border border-slate-200 p-4">
-                        <p class="text-xs uppercase tracking-wide text-slate-500">Delta heures totales</p>
-                        <p class="mono mt-2 text-2xl font-semibold {{ $comparisonColor }}">{{ $comparisonTotalDeltaHours }} h</p>
-                        <p class="mono mt-1 text-xs text-slate-500">
-                            @if ($comparisonTotalDeltaPercent !== null)
-                                {{ $comparisonTotalDeltaPercent }}%
-                            @else
-                                n/a (base précédente à 0)
-                            @endif
-                        </p>
-                    </div>
-
-                    <div class="rounded-xl border border-slate-200 p-4">
-                        <p class="text-xs uppercase tracking-wide text-slate-500">Delta moyenne/jour</p>
-                        <p class="mono mt-2 text-2xl font-semibold {{ $comparisonColor }}">{{ $comparisonAverageDeltaHours }} h/j</p>
-                        <p class="mt-1 text-xs text-slate-500">{{ ucfirst($comparisonDirection) }} sur la période</p>
-                    </div>
-                </div>
-            </article>
-
-            <article class="rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-sm">
-                <h2 class="text-lg font-semibold text-slate-900">Heatmap journalière</h2>
-                <p class="mt-1 text-sm text-slate-500">
-                    {{ $heatmapTrackedDays }} jours tracés · max journalier {{ $heatmapMaxHours }} h
-                </p>
-
-                <div class="mt-4 overflow-x-auto pb-2">
-                    <div class="inline-flex min-w-max items-start gap-1.5">
-                        <div class="mt-4 grid grid-rows-7 gap-0.5 pr-1 text-[10px] text-slate-500">
-                            <div class="h-[10px] leading-[10px]">Lun</div>
-                            <div class="h-[10px] leading-[10px]"></div>
-                            <div class="h-[10px] leading-[10px]">Mer</div>
-                            <div class="h-[10px] leading-[10px]"></div>
-                            <div class="h-[10px] leading-[10px]">Ven</div>
-                            <div class="h-[10px] leading-[10px]"></div>
-                            <div class="h-[10px] leading-[10px]"></div>
-                        </div>
-
-                        <div>
-                            <div class="mb-1 flex gap-0.5">
-                                @foreach ($heatmapWeekLabels as $monthLabel)
-                                    <div class="relative h-[10px] w-[10px]">
-                                        @if ($monthLabel !== '')
-                                            <span class="absolute left-0 top-0 whitespace-nowrap text-[10px] leading-[10px] text-slate-500">
-                                                {{ $monthLabel }}
-                                            </span>
-                                        @endif
-                                    </div>
-                                @endforeach
-                            </div>
-
-                            <div class="flex gap-0.5">
-                                @foreach ($heatmapWeeks as $week)
-                                    <div class="flex w-[10px] flex-col gap-0.5">
-                                        @foreach ($week as $cell)
-                                            @if (($cell['type'] ?? '') === 'day')
-                                                @php
-                                                    $isMissingCell = (bool) ($cell['is_missing'] ?? false);
-                                                    $cellTitle = $isMissingCell
-                                                        ? ($cell['label'].' · a completer')
-                                                        : ($cell['label'].' · '.$cell['hours'].' h');
-                                                @endphp
-                                                <div
-                                                    title="{{ $cellTitle }}"
-                                                    class="h-[10px] w-[10px] rounded-[3px] {{ $cell['color_class'] }} border {{ $isMissingCell ? 'border-slate-300' : 'border-slate-200/70' }}"
-                                                ></div>
-                                            @else
-                                                <div class="h-[10px] w-[10px] rounded-[3px] bg-transparent"></div>
-                                            @endif
-                                        @endforeach
-                                    </div>
-                                @endforeach
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                    <span>A completer</span>
-                    <span class="h-3 w-3 rounded bg-white border border-slate-300"></span>
-                    <span>Faible</span>
-                    <span class="h-3 w-3 rounded bg-slate-100 border border-slate-200/70"></span>
-                    <span class="h-3 w-3 rounded bg-emerald-100 border border-slate-200/70"></span>
-                    <span class="h-3 w-3 rounded bg-emerald-300 border border-slate-200/70"></span>
-                    <span class="h-3 w-3 rounded bg-emerald-500 border border-slate-200/70"></span>
-                    <span class="h-3 w-3 rounded bg-emerald-700 border border-slate-200/70"></span>
-                    <span>Fort</span>
-                </div>
-            </article>
         </section>
 
         <section id="time-breakdown" class="mt-6 grid gap-4 xl:grid-cols-2">

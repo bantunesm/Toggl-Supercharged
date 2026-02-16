@@ -90,7 +90,7 @@
         </article>
     </div>
 
-    <div class="mt-3">
+    {{-- <div class="mt-3">
         <article class="highlight-card rounded-xl border p-4 pr-24">
             <div class="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-sky-100/75 blur-2xl"></div>
             <div class="highlight-watermark">
@@ -124,5 +124,5 @@
                 @endif
             </div>
         </article>
-    </div>
+    </div> --}}
 </section>

@@ -9,4 +9,12 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        10%, 30%, 50%, 70%, 90% { transform: translateX(-2px) rotate(-1deg); }
+        20%, 40%, 60%, 80% { transform: translateX(2px) rotate(1deg); }
+    }
+
+    --animate-shake: shake 3s ease-in-out infinite;
 }
