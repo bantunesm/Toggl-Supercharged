@@ -111,6 +111,44 @@ Artisan::command('toggl:sync-today', function (TogglService $togglService): void
     ]));
 })->purpose('Sync only today Toggl snapshot');
 
+Artisan::command('toggl:sync-day {date=yesterday} {--force}', function (TogglService $togglService): int {
+    $dateInput = strtolower(trim((string) $this->argument('date')));
+
+    try {
+        $day = CarbonImmutable::parse($dateInput, config('app.timezone'))->startOfDay();
+    } catch (\Throwable) {
+        $this->error(sprintf('Invalid date: %s. Use e.g. 2026-02-10, yesterday, today.', $dateInput));
+
+        return Command::FAILURE;
+    }
+
+    $force = (bool) $this->option('force');
+    $recap = $togglService->syncDaySnapshot($day, $force);
+
+    $this->info(sprintf(
+        'Toggl day synced: %s (%s)%s',
+        (string) $recap['date'],
+        (string) $recap['hours'],
+        $force ? ' [forced]' : ''
+    ));
+    $this->line(sprintf('Seconds: %d', (int) $recap['seconds']));
+    $this->line(sprintf('Synced at: %s', (string) $recap['synced_at']));
+
+    if ((bool) $recap['quota_limited']) {
+        $this->warn('Day sync stopped due to Toggl quota limit.');
+    }
+    if ((bool) $recap['has_api_fallback']) {
+        $this->warn('Day sync used fallback data due to API issue.');
+    }
+
+    Log::info('Toggl day sync recap', array_merge($recap, [
+        'trigger' => 'console_sync',
+        'mode' => 'sync_day_command',
+    ]));
+
+    return Command::SUCCESS;
+})->purpose('Sync one specific Toggl day (default: yesterday)');
+
 Artisan::command(
     'timeflip:import
     {csv : Path to a TimeFlip CSV export}
