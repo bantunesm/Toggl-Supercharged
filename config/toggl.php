@@ -7,6 +7,7 @@ return [
     'api_token' => env('TOGGL_API_TOKEN'),
     'workspace_id' => (int) env('TOGGL_WORKSPACE_ID', 0),
     'summary_endpoint' => env('TOGGL_SUMMARY_ENDPOINT', '/reports/api/v3/workspace/%d/summary/time_entries'),
+    'time_entries_endpoint' => env('TOGGL_TIME_ENTRIES_ENDPOINT', '/api/v9/me/time_entries'),
     'summary_grouping' => env('TOGGL_SUMMARY_GROUPING', 'users'),
     'daily_goal_hours' => (float) env('TOGGL_DAILY_GOAL_HOURS', 8),
     'cache_ttl_minutes' => (int) env('TOGGL_CACHE_TTL_MINUTES', 10),

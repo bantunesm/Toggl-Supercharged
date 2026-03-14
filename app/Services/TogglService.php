@@ -783,8 +783,17 @@ class TogglService
         }
 
         try {
-            $payload = $this->fetchSummary($workspaceId, $periodStart, $periodEnd);
-            $totalTrackedSeconds = $this->extractTotalTrackedSeconds($payload);
+            if ($periodStart->isSameDay($periodEnd)) {
+                [$payload, $totalTrackedSeconds] = $this->fetchDailySnapshotPayload($workspaceId, $periodStart);
+                [$payload, $totalTrackedSeconds] = $this->mergeDailyManualImports(
+                    $snapshot,
+                    $payload,
+                    $totalTrackedSeconds
+                );
+            } else {
+                $payload = $this->fetchSummary($workspaceId, $periodStart, $periodEnd);
+                $totalTrackedSeconds = $this->extractTotalTrackedSeconds($payload);
+            }
         } catch (Throwable $throwable) {
             report($throwable);
 
@@ -806,21 +815,194 @@ class TogglService
             return $this->buildFallbackSnapshot($workspaceId, $periodStart, $periodEnd, $throwable);
         }
 
-        /** @var TogglSyncSnapshot $snapshot */
-        $snapshot = TogglSyncSnapshot::query()->updateOrCreate(
-            [
-                'workspace_id' => $workspaceId,
-                'window_start_date' => $periodStart->toDateString(),
-                'window_end_date' => $periodEnd->toDateString(),
-            ],
-            [
-                'total_tracked_seconds' => $totalTrackedSeconds,
-                'raw_payload' => $payload,
-                'synced_at' => now(),
-            ]
+        return $this->storeSnapshot(
+            $snapshot,
+            $workspaceId,
+            $periodStart,
+            $periodEnd,
+            $totalTrackedSeconds,
+            $payload
         );
+    }
 
-        return $snapshot;
+    /**
+     * @return array{0: array<string, mixed>, 1: int}
+     */
+    private function fetchDailySnapshotPayload(int $workspaceId, CarbonImmutable $day): array
+    {
+        try {
+            return $this->fetchDailySnapshotPayloadFromTimeEntries($workspaceId, $day);
+        } catch (Throwable $throwable) {
+            report($throwable);
+
+            $payload = $this->fetchSummary($workspaceId, $day, $day);
+            $payload['source'] = 'summary_daily_fallback';
+            $payload['daily_timezone'] = config('app.timezone');
+            $payload['tracked_entry_count'] = null;
+
+            return [$payload, $this->extractTotalTrackedSeconds($payload)];
+        }
+    }
+
+    /**
+     * @return array{0: array<string, mixed>, 1: int}
+     */
+    private function fetchDailySnapshotPayloadFromTimeEntries(int $workspaceId, CarbonImmutable $day): array
+    {
+        $dayStart = $day->startOfDay();
+        $dayEnd = $dayStart->addDay();
+        $queryStart = $dayStart->subDay();
+        $entries = $this->fetchTimeEntries($queryStart, $dayEnd);
+
+        $totalTrackedSeconds = 0;
+        $trackedEntryCount = 0;
+
+        foreach ($entries as $entry) {
+            $entryWorkspaceIdRaw = $entry['workspace_id'] ?? null;
+            if ($entryWorkspaceIdRaw !== null && (int) $entryWorkspaceIdRaw !== $workspaceId) {
+                continue;
+            }
+
+            $seconds = $this->computeEntryOverlapSecondsForDay($entry, $dayStart, $dayEnd);
+            if ($seconds <= 0) {
+                continue;
+            }
+
+            $totalTrackedSeconds += $seconds;
+            $trackedEntryCount++;
+        }
+
+        return [[
+            'source' => 'time_entries_daily_split',
+            'daily_timezone' => config('app.timezone'),
+            'query_start' => $queryStart->toIso8601String(),
+            'query_end' => $dayEnd->toIso8601String(),
+            'tracked_entry_count' => $trackedEntryCount,
+        ], $totalTrackedSeconds];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function fetchTimeEntries(CarbonImmutable $start, CarbonImmutable $end): array
+    {
+        $response = Http::acceptJson()
+            ->withBasicAuth($this->apiToken(), 'api_token')
+            ->timeout((int) config('toggl.timeout_seconds', 20))
+            ->retry(2, 300)
+            ->get($this->timeEntriesUrl(), [
+                'start_date' => $start->toIso8601String(),
+                'end_date' => $end->toIso8601String(),
+            ]);
+
+        $response->throw();
+
+        $decoded = $response->json();
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Unexpected Toggl time entries payload.');
+        }
+
+        return array_values(array_filter($decoded, static fn (mixed $entry): bool => is_array($entry)));
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function computeEntryOverlapSecondsForDay(
+        array $entry,
+        CarbonImmutable $dayStart,
+        CarbonImmutable $dayEnd
+    ): int {
+        $entryStartRaw = $entry['start'] ?? null;
+        if (!is_string($entryStartRaw) || trim($entryStartRaw) === '') {
+            return 0;
+        }
+
+        $entryStart = CarbonImmutable::parse($entryStartRaw);
+        $entryStop = $this->resolveTimeEntryStop($entry, $entryStart);
+        if ($entryStop === null || $entryStop->lte($entryStart)) {
+            return 0;
+        }
+
+        $overlapStart = $entryStart->gt($dayStart) ? $entryStart : $dayStart;
+        $overlapEnd = $entryStop->lt($dayEnd) ? $entryStop : $dayEnd;
+        if ($overlapEnd->lte($overlapStart)) {
+            return 0;
+        }
+
+        return (int) round($overlapStart->diffInSeconds($overlapEnd));
+    }
+
+    /**
+     * @param array<string, mixed> $entry
+     */
+    private function resolveTimeEntryStop(array $entry, CarbonImmutable $entryStart): ?CarbonImmutable
+    {
+        $entryStopRaw = $entry['stop'] ?? null;
+        if (is_string($entryStopRaw) && trim($entryStopRaw) !== '') {
+            return CarbonImmutable::parse($entryStopRaw);
+        }
+
+        $durationRaw = $entry['duration'] ?? null;
+        if (is_numeric($durationRaw)) {
+            $duration = (int) $durationRaw;
+            if ($duration >= 0) {
+                return $entryStart->addSeconds($duration);
+            }
+        }
+
+        return CarbonImmutable::now('UTC');
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array{0: array<string, mixed>, 1: int}
+     */
+    private function mergeDailyManualImports(
+        ?TogglSyncSnapshot $existingSnapshot,
+        array $payload,
+        int $totalTrackedSeconds
+    ): array {
+        if ($existingSnapshot === null || !is_array($existingSnapshot->raw_payload)) {
+            return [$payload, $totalTrackedSeconds];
+        }
+
+        $manualImports = $existingSnapshot->raw_payload['manual_imports'] ?? null;
+        if (!is_array($manualImports)) {
+            return [$payload, $totalTrackedSeconds];
+        }
+
+        $manualSeconds = $this->extractManualImportedSeconds($manualImports);
+        if ($manualSeconds <= 0) {
+            return [$payload, $totalTrackedSeconds];
+        }
+
+        $payload['manual_imports'] = $manualImports;
+
+        return [$payload, $totalTrackedSeconds + $manualSeconds];
+    }
+
+    /**
+     * @param array<string, mixed> $manualImports
+     */
+    private function extractManualImportedSeconds(array $manualImports): int
+    {
+        $manualSeconds = 0;
+
+        foreach ($manualImports as $import) {
+            if (!is_array($import)) {
+                continue;
+            }
+
+            $secondsRaw = $import['seconds'] ?? null;
+            if (!is_numeric($secondsRaw)) {
+                continue;
+            }
+
+            $manualSeconds += max(0, (int) $secondsRaw);
+        }
+
+        return $manualSeconds;
     }
 
     /**
@@ -876,25 +1058,54 @@ class TogglService
             $totalTrackedSeconds += (int) $secondsByDate[$date];
         }
 
-        /** @var TogglSyncSnapshot $rollupSnapshot */
-        $rollupSnapshot = TogglSyncSnapshot::query()->updateOrCreate(
+        $existingSnapshot = TogglSyncSnapshot::query()
+            ->where('workspace_id', $workspaceId)
+            ->whereDate('window_start_date', $periodStart->toDateString())
+            ->whereDate('window_end_date', $periodEnd->toDateString())
+            ->first();
+
+        return $this->storeSnapshot(
+            $existingSnapshot,
+            $workspaceId,
+            $periodStart,
+            $periodEnd,
+            $totalTrackedSeconds,
             [
-                'workspace_id' => $workspaceId,
-                'window_start_date' => $periodStart->toDateString(),
-                'window_end_date' => $periodEnd->toDateString(),
-            ],
-            [
-                'total_tracked_seconds' => $totalTrackedSeconds,
-                'raw_payload' => [
-                    'source' => 'daily_rollup',
-                    'derived_from_daily' => true,
-                    'daily_snapshot_count' => $expectedDays,
-                ],
-                'synced_at' => now(),
+                'source' => 'daily_rollup',
+                'derived_from_daily' => true,
+                'daily_snapshot_count' => $expectedDays,
             ]
         );
+    }
 
-        return $rollupSnapshot;
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function storeSnapshot(
+        ?TogglSyncSnapshot $snapshot,
+        int $workspaceId,
+        CarbonImmutable $periodStart,
+        CarbonImmutable $periodEnd,
+        int $totalTrackedSeconds,
+        array $payload
+    ): TogglSyncSnapshot {
+        $snapshot ??= new TogglSyncSnapshot([
+            'workspace_id' => $workspaceId,
+            'window_start_date' => $periodStart->toDateString(),
+            'window_end_date' => $periodEnd->toDateString(),
+        ]);
+
+        $snapshot->fill([
+            'workspace_id' => $workspaceId,
+            'window_start_date' => $periodStart->toDateString(),
+            'window_end_date' => $periodEnd->toDateString(),
+            'total_tracked_seconds' => $totalTrackedSeconds,
+            'raw_payload' => $payload,
+            'synced_at' => now(),
+        ]);
+        $snapshot->save();
+
+        return $snapshot->fresh() ?? $snapshot;
     }
 
     private function isTodaySnapshotFresh(int $workspaceId, CarbonImmutable $today): bool
@@ -977,6 +1188,18 @@ class TogglService
     {
         return is_array($snapshot->raw_payload)
             && ($snapshot->raw_payload['source'] ?? null) === 'daily_rollup';
+    }
+
+    private function isPreciseDailySnapshot(TogglSyncSnapshot $snapshot): bool
+    {
+        return is_array($snapshot->raw_payload)
+            && ($snapshot->raw_payload['source'] ?? null) === 'time_entries_daily_split';
+    }
+
+    private function isManualTimeflipSnapshot(TogglSyncSnapshot $snapshot): bool
+    {
+        return is_array($snapshot->raw_payload)
+            && ($snapshot->raw_payload['source'] ?? null) === 'timeflip_csv';
     }
 
     private function isManualTimeflipZeroPlaceholderSnapshot(TogglSyncSnapshot $snapshot): bool
@@ -1668,6 +1891,14 @@ class TogglService
     {
         $endpointPattern = (string) config('toggl.summary_endpoint', '/reports/api/v3/workspace/%d/summary/time_entries');
         $endpoint = sprintf($endpointPattern, $workspaceId);
+        $baseUrl = rtrim((string) config('toggl.base_url', 'https://api.track.toggl.com'), '/');
+
+        return $baseUrl.'/'.ltrim($endpoint, '/');
+    }
+
+    private function timeEntriesUrl(): string
+    {
+        $endpoint = (string) config('toggl.time_entries_endpoint', '/api/v9/me/time_entries');
         $baseUrl = rtrim((string) config('toggl.base_url', 'https://api.track.toggl.com'), '/');
 
         return $baseUrl.'/'.ltrim($endpoint, '/');
